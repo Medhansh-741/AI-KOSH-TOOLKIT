@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AIKosh Dataset Quality Report</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; margin: 40px; }
+        h1 { color: #0066cc; border-bottom: 2px solid #0066cc; padding-bottom: 10px; }
+        .score-box { background-color: #f5f5f5; border: 1px solid #ddd; padding: 20px; border-radius: 5px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>AIKosh Dataset Quality Assessment Report</h1>
+    <div class="score-box">
+        <h3>Dataset: {{ dataset_name }}</h3>
+        <p><strong>CQI Score:</strong> {{ cqi.value }}% (Band: {{ cqi.band }})</p>
+        <p><strong>Privacy-Risk Score (PRS):</strong> {{ prs.value }} (Band: {{ prs.band }})</p>
+        <p><strong>Release Classification:</strong> {{ release.classification }}</p>
+    </div>
+</body>
+</html>

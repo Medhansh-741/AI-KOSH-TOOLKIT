@@ -1,0 +1,37 @@
+# YAML-driven rules catalog for 15 MIDAS domains
+domains:
+  1_annotation:
+    name: "Annotation / Labelling Reliability"
+    metrics:
+      irr_kappa_threshold_adequate: 0.6
+      irr_kappa_threshold_exemplary: 0.8
+  2_metadata:
+    name: "Metadata Completeness"
+  3_documentation:
+    name: "Documentation & User Guidance"
+  4_representativeness:
+    name: "Population Representativeness"
+  5_interoperability:
+    name: "Data Structure & Interoperability"
+    metrics:
+      completeness_threshold_pct: 90.0
+  6_ai_readiness:
+    name: "AI / Analytics Readiness"
+  7_privacy:
+    name: "Privacy & Identifiability"
+  8_security:
+    name: "Security & Access Governance"
+  9_provenance:
+    name: "Provenance & Workflow Transparency"
+  10_ethics:
+    name: "Ethical & Social Accountability"
+  11_synthetic:
+    name: "Synthetic / Simulated Data"
+  12_stewardship:
+    name: "Stewardship & Governance"
+  13_model_linkage:
+    name: "Model Linkage Integrity"
+  14_sustainability:
+    name: "Environmental Sustainability"
+  15_curation:
+    name: "Continuous Curation & Feedback"

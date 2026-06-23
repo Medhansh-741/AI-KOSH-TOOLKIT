@@ -1,0 +1,26 @@
+import httpx
+import logging
+from typing import Dict, Any
+
+logger = logging.getLogger(__name__)
+
+class WebhookService:
+    async def post_quality_metadata(self, webhook_url: str, payload: Dict[str, Any]) -> bool:
+        """POSTs assessment results back to the AIKosh platform webhook."""
+        if not webhook_url:
+            logger.warning("No webhook URL provided. Skipping webhook post.")
+            return False
+            
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(webhook_url, json=payload)
+                response.raise_for_status()
+                logger.info(f"Successfully posted quality metadata to {webhook_url}")
+                return True
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error posting webhook: {e.response.status_code} - {e.response.text}")
+        except Exception as e:
+            logger.error(f"Failed to post quality metadata to webhook: {e}")
+        return False
+
+webhook_service = WebhookService()
