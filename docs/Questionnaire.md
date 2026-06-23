@@ -1,3 +1,5 @@
+> **Core Development Philosophy:** "Prioritize building a fully functional, secure, end-to-end integration skeleton (UI -> API -> Worker -> DB/S3 -> Polling) with mock scoring results first, ensuring pipeline stability and security before implementing complex calculation engines."
+
 # Metadata Intake Form — Questionnaire Specification
 # AIKosh Dataset Quality Evaluation Toolkit
 

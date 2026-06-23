@@ -1,3 +1,5 @@
+> **Core Development Philosophy:** "Prioritize building a fully functional, secure, end-to-end integration skeleton (UI -> API -> Worker -> DB/S3 -> Polling) with mock scoring results first, ensuring pipeline stability and security before implementing complex calculation engines."
+
 # Technical Design Document
 # AIKosh Dataset Quality Evaluation Toolkit
 
@@ -75,16 +77,18 @@ This document is the primary reference for:
 
 The toolkit is a standalone backend service with a React frontend. It integrates into AIKosh as an external quality-scoring microservice. It is not embedded inside the AIKosh codebase — it runs as a separate deployed service that AIKosh calls via REST API.
 
-**Runtime flow (summary):**
-
-```
 AIKosh / Web UI
       │
-      │ POST /api/v1/assess (multipart: file + metadata JSON)
+      │ 1. Request upload URL (POST /api/v1/assess/upload-url)
+      │ ◀─ Returns pre-signed S3 upload URL and S3 key
+      │
+      │ 2. Upload dataset directly to MinIO/S3 using pre-signed URL
+      │
+      │ 3. Submit metadata & S3 key (POST /api/v1/assess)
       ▼
 FastAPI API Layer
       │
-      │ validates → stores file to S3 → writes assessment record to PostgreSQL
+      │ validates metadata → verifies file exists in S3 → writes assessment record to PostgreSQL
       │ dispatches Celery task
       ▼
 Redis (broker)
@@ -272,6 +276,9 @@ aikosh-quality-toolkit/
 │   │   │   ├── GapPanel.jsx
 │   │   │   └── ScoreHistory.jsx
 │   │   ├── pages/
+│   │   │   ├── LoginPage.jsx
+│   │   │   ├── RegisterPage.jsx
+│   │   │   ├── AdminPage.jsx
 │   │   │   ├── UploadPage.jsx
 │   │   │   ├── DashboardPage.jsx
 │   │   │   └── ReportPage.jsx
@@ -301,7 +308,7 @@ aikosh-quality-toolkit/
 
 The FastAPI app is the entry point for all HTTP traffic. It handles:
 - Request validation via Pydantic schemas
-- File upload receipt (multipart/form-data)
+- Generating pre-signed upload URLs and validating dataset submission metadata
 - Assessment job dispatch to Celery
 - Status polling responses
 - Report download serving
@@ -314,7 +321,8 @@ The app does **no heavy computation** — it immediately dispatches work to Cele
 # app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1 import assess, reports, datasets, health
+from app.api.v1 import assess, reports, datasets, health, auth, admin
+from app.config import settings
 
 app = FastAPI(
     title="AIKosh Dataset Quality Toolkit",
@@ -324,9 +332,18 @@ app = FastAPI(
     openapi_url="/openapi.json"
 )
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# CORS configuration supporting secure HttpOnly cookies
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,  # Configured origins list, e.g. ["http://localhost:3000"]
+    allow_credentials=True,               # REQUIRED for HttpOnly session cookies
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
+app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
+app.include_router(admin.router, prefix="/api/v1", tags=["admin"])
 app.include_router(assess.router, prefix="/api/v1", tags=["assessment"])
 app.include_router(reports.router, prefix="/api/v1", tags=["reports"])
 app.include_router(datasets.router, prefix="/api/v1", tags=["datasets"])
@@ -883,13 +900,48 @@ CREATE TYPE confidence_level AS ENUM ('High', 'Medium', 'Low');
 CREATE TYPE sensitivity_class AS ENUM ('standard', 'high_stigma', 'critical');
 
 -- ------------------------------------------------------------
+-- TABLE: users
+-- User registry for human operators
+-- ------------------------------------------------------------
+CREATE TABLE users (
+    id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email                 VARCHAR(255) NOT NULL UNIQUE,
+    hashed_password       VARCHAR(255) NOT NULL,
+    role                  VARCHAR(20) NOT NULL DEFAULT 'user', -- user/reviewer/admin
+    is_active             BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_users_email ON users(email);
+
+-- ------------------------------------------------------------
+-- TABLE: api_keys
+-- API key management for submitters and AIKosh integration
+-- ------------------------------------------------------------
+CREATE TABLE api_keys (
+    key_id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    key_hash              VARCHAR(64) NOT NULL UNIQUE,    -- SHA-256 hash of key
+    key_prefix            VARCHAR(10) NOT NULL,           -- First 8 chars for identification
+    user_id               UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    is_active             BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_used_at          TIMESTAMPTZ,
+    expires_at            TIMESTAMPTZ
+);
+
+CREATE INDEX idx_api_keys_key_hash ON api_keys(key_hash);
+CREATE INDEX idx_api_keys_is_active ON api_keys(is_active);
+
+-- ------------------------------------------------------------
 -- TABLE: assessments
 -- Main assessment lifecycle record
 -- ------------------------------------------------------------
 CREATE TABLE assessments (
     assessment_id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     dataset_id            VARCHAR(255) NOT NULL,          -- AIKosh dataset ID
-    submitter_id          VARCHAR(255),                   -- API key owner / user ID
+    user_id               UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    api_key_id            UUID REFERENCES api_keys(key_id) ON DELETE SET NULL,
     submission_timestamp  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     completion_timestamp  TIMESTAMPTZ,
     status                assessment_status NOT NULL DEFAULT 'queued',
@@ -899,8 +951,9 @@ CREATE TABLE assessments (
     file_format           VARCHAR(50),
     file_size_bytes       BIGINT,
     file_sha256           VARCHAR(64),
-    s3_file_key           VARCHAR(500),                   -- Temp S3 key for dataset file
+    s3_file_key           VARCHAR(500),                   -- S3 key for dataset file
     error_message         TEXT,                           -- Populated on failure
+    error_traceback       TEXT,                           -- Full stack trace on failure
     celery_task_id        VARCHAR(255),
     created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -1047,25 +1100,6 @@ CREATE INDEX idx_audit_logs_event_type ON audit_logs(event_type);
 
 -- Prevent deletion of audit logs (append-only enforcement)
 CREATE RULE no_delete_audit AS ON DELETE TO audit_logs DO INSTEAD NOTHING;
-
--- ------------------------------------------------------------
--- TABLE: api_keys
--- API key management for submitters and AIKosh integration
--- ------------------------------------------------------------
-CREATE TABLE api_keys (
-    key_id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    key_hash              VARCHAR(64) NOT NULL UNIQUE,    -- SHA-256 hash of key
-    key_prefix            VARCHAR(10) NOT NULL,           -- First 8 chars for identification
-    owner_name            VARCHAR(255) NOT NULL,
-    role                  VARCHAR(20) NOT NULL DEFAULT 'submitter',  -- submitter/reviewer/admin
-    is_active             BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    last_used_at          TIMESTAMPTZ,
-    expires_at            TIMESTAMPTZ
-);
-
-CREATE INDEX idx_api_keys_key_hash ON api_keys(key_hash);
-CREATE INDEX idx_api_keys_is_active ON api_keys(is_active);
 ```
 
 ---
@@ -1074,13 +1108,14 @@ CREATE INDEX idx_api_keys_is_active ON api_keys(is_active);
 
 | Table | Purpose | Key Indexes |
 |---|---|---|
-| `assessments` | Lifecycle record for every assessment job | `dataset_id`, `status`, `submission_timestamp` |
+| `users` | User accounts for human browser operators (submitters, reviewers, admins) | `email` |
+| `api_keys` | API key registry linking programmatic keys to users | `key_hash`, `is_active` |
+| `assessments` | Lifecycle record for every assessment job, linked to user and API key | `dataset_id`, `status`, `submission_timestamp` |
 | `dataset_metadata` | Metadata form values for each submission | `assessment_id` |
 | `dataset_profiles` | Full profiler output JSON | `assessment_id` |
 | `domain_scores` | 15 domain scores per assessment | `assessment_id`, `domain_number` |
 | `assessment_results` | Final CQI, PRS, release class | `assessment_id`, `release_classification`, `cqi` |
 | `audit_logs` | Append-only event log | `assessment_id`, `event_timestamp`, `event_type` |
-| `api_keys` | API key registry | `key_hash`, `is_active` |
 
 ---
 
@@ -1097,7 +1132,7 @@ CREATE INDEX idx_api_keys_is_active ON api_keys(is_active);
 ## 7. Object Storage Design
 
 Object storage (MinIO in dev, S3-compatible in prod) holds:
-- Uploaded dataset files (temporary — deleted after assessment)
+- Uploaded dataset files (retained until manually deleted by the user)
 - Generated reports (JSON, HTML, PDF — retained for 5 years)
 - Dataset profile JSONs (retained for audit purposes)
 
@@ -1107,7 +1142,7 @@ Object storage (MinIO in dev, S3-compatible in prod) holds:
 aikosh-toolkit-bucket/
 ├── uploads/
 │   └── {assessment_id}/
-│       └── dataset.{ext}             ← Deleted post-assessment
+│       └── dataset.{ext}             ← Retained until manual deletion by user
 ├── profiles/
 │   └── {assessment_id}/
 │       └── profile.json              ← Retained for audit
@@ -1119,7 +1154,7 @@ aikosh-toolkit-bucket/
 ```
 
 **Access policies:**
-- `uploads/` — write on ingestion, read by worker, delete post-assessment
+- `uploads/` — write on ingestion, read by worker, deleted by user request (admins have no access to datasets/reports due to strict privacy boundaries)
 - `profiles/` — write by profiler worker, read-only after that
 - `reports/` — write by report generator, public-read via pre-signed URLs (time-limited)
 
@@ -1130,25 +1165,21 @@ aikosh-toolkit-bucket/
 ## 8. File Ingestion Pipeline — Detailed Design
 
 ```
-POST /api/v1/assess (multipart/form-data)
+POST /api/v1/assess/upload-url (JSON request)
 │
-├── FastAPI receives file + metadata JSON
+├── FastAPI generates secure, temporary S3 pre-signed upload URL for MinIO
+└── Returns URL and S3 key to React Frontend
+
+React Frontend: Uploads file directly to S3 bucket using pre-signed URL
+
+POST /api/v1/assess (JSON request)
 │
+├── FastAPI receives S3 key + metadata JSON
 ├── Pydantic validates metadata JSON schema
-│
-├── File validation (validator.py):
-│   ├── Check MIME type against allowed list
-│   ├── Check file size ≤ 5GB
-│   ├── Check filename for path traversal (reject ../ etc.)
-│   └── Compute SHA-256 hash
-│
-├── Store file to S3: uploads/{assessment_id}/dataset.{ext}
-│
-├── Write assessments record (status=queued)
-├── Write dataset_metadata record
-│
-├── Dispatch Celery task: run_assessment.delay(assessment_id)
-│
+├── FastAPI verifies file exists in S3 (head_object check)
+├── Writes assessments record (status=queued)
+├── Writes dataset_metadata record
+├── Dispatches Celery task: run_assessment.delay(assessment_id)
 └── Return HTTP 202 Accepted:
     { "assessment_id": "uuid", "status": "queued" }
 ```
@@ -1327,11 +1358,13 @@ The Jinja2 template renders:
 ## 15. Async Job Pipeline — Detailed Design
 
 ```
-FastAPI: POST /api/v1/assess
-         │
-         ├── validates → stores to S3 → writes DB record (status=queued)
-         │
-         └── run_assessment.delay(assessment_id)   [dispatched to Redis]
+React Frontend: Upload dataset directly to S3/MinIO via pre-signed URL
+                │
+                └── POST /api/v1/assess (registers upload details)
+                    │
+                    ├── writes DB record (status=queued)
+                    │
+                    └── run_assessment.delay(assessment_id)   [dispatched to Redis]
 
 ───────────────────────────────────────────────────────────────────
 
@@ -1367,12 +1400,15 @@ run_assessment(assessment_id)
 ├── STEP 11: Update assessment status → complete
 │          → Set completion_timestamp
 │
-├── STEP 12: Delete dataset file from S3
-│          → audit_event("dataset_file_deleted")
+├── STEP 12: Dispatch webhook task
 │
-├── STEP 13: Dispatch webhook task
-│
-└── STEP 14: audit_event("assessment_complete")
+└── STEP 13: audit_event("assessment_complete")
+
+───────────────────────────────────────────────────────────────────
+
+### 15.1 Assessment Cancellation and File Deletion
+- **Cancellation:** If the user cancels an assessment via the UI, the FastAPI backend revokes/terminates the active Celery worker task using `celery.app.control.revoke(task_id, terminate=True)`, sets the DB assessment status to `failed`, logs a `cancelled` rationale, and records `audit_event("assessment_cancelled")`.
+- **Manual Deletion:** Uploaded dataset files are *not* automatically deleted after report generation (STEP 12 is removed from the worker pipeline). Instead, files are kept securely in S3/MinIO until the user manually clicks "Delete Dataset" on the UI, which triggers a `DELETE /api/v1/assess/{assessment_id}` request to purge the file from S3.
 
 ───────────────────────────────────────────────────────────────────
 
@@ -1397,17 +1433,172 @@ send_webhook(assessment_id)
 
 ## 16. API Layer — Endpoint Design
 
+### Authentication & Admin Endpoints
+
+#### POST /api/v1/auth/register
+- **Purpose:** Register a new user account.
+- **Onboarding Behavior:** Upon registration, the user account is instantly activated and logged in. The backend automatically sets the secure `session_token` cookie so the user does not need a separate activation/login step.
+- **Auth:** None.
+- **Request Body (JSON):**
+  ```json
+  {
+    "email": "user@example.com",
+    "password": "secure_password"
+  }
+  ```
+- **Response (HTTP 201):** Sets `session_token` cookie and returns:
+  ```json
+  {
+    "user_id": "uuid",
+    "email": "user@example.com"
+  }
+  ```
+
+#### POST /api/v1/auth/login
+- **Purpose:** Login and receive an HttpOnly cookie.
+- **Auth:** None.
+- **Request Body (JSON):** Same as register.
+- **Response (HTTP 200):** Sets an `HttpOnly`, `Secure`, `SameSite=Lax` cookie named `session_token` containing the JWT.
+  ```json
+  {
+    "message": "Login successful"
+  }
+  ```
+
+#### POST /api/v1/auth/logout
+- **Purpose:** Clear the session cookie.
+- **Auth:** Required (valid session cookie).
+- **Response (HTTP 200):** Clears the `session_token` cookie.
+  ```json
+  {
+    "message": "Logged out successfully"
+  }
+  ```
+
+#### GET /api/v1/auth/keys
+- **Purpose:** List all active developer API keys for the current user.
+- **Auth:** Required (valid session cookie).
+- **Response (HTTP 200):**
+  ```json
+  {
+    "keys": [
+      {
+        "key_id": "b4e8c9d1-0f3a-4e2b-9c31-8d9e0f1a2b3c",
+        "key_prefix": "tkt_live_ab12",
+        "created_at": "2026-06-18T10:30:00Z",
+        "last_used_at": "2026-06-18T11:45:00Z",
+        "expires_at": null
+      }
+    ]
+  }
+  ```
+
+#### POST /api/v1/auth/keys
+- **Purpose:** Generate a new database-backed developer API key.
+- **Auth:** Required (valid session cookie).
+- **Response (HTTP 201):** Returns the raw key (only visible once) and key metadata.
+  ```json
+  {
+    "key_id": "b4e8c9d1-0f3a-4e2b-9c31-8d9e0f1a2b3c",
+    "key_prefix": "tkt_live_ab12",
+    "raw_key": "tkt_live_ab12cd34ef56gh78ij90kl12mn34op56",
+    "created_at": "2026-06-18T10:30:00Z",
+    "expires_at": null
+  }
+  ```
+
+#### DELETE /api/v1/auth/keys/{key_id}
+- **Purpose:** Revoke / delete a developer API key.
+- **Auth:** Required (valid session cookie).
+- **Response (HTTP 200):**
+  ```json
+  {
+    "message": "API key revoked successfully"
+  }
+  ```
+
+#### GET /api/v1/admin/users
+- **Purpose:** List registered users (Admin only).
+- **Auth:** Required (valid session cookie with role `admin`).
+- **Response (HTTP 200):**
+  ```json
+  {
+    "users": [
+      {
+        "user_id": "uuid",
+        "email": "user@example.com",
+        "role": "user",
+        "is_active": true,
+        "created_at": "timestamp"
+      }
+    ]
+  }
+  ```
+- **Note:** Access boundaries strictly prevent admins from retrieving sensitive data files or reports.
+
+#### POST /api/v1/admin/users/{user_id}/toggle-active
+- **Purpose:** Suspend or reactivate user account (Admin only).
+- **Auth:** Required (valid session cookie with role `admin`).
+- **Response (HTTP 200):**
+  ```json
+  {
+    "user_id": "uuid",
+    "is_active": false
+  }
+  ```
+
+---
+
+### POST /api/v1/assess/upload-url
+
+**Purpose:** Request a temporary pre-signed S3/MinIO upload URL for dataset file.  
+**Auth:** Required (session cookie or Bearer API key).  
+**Content-Type:** `application/json`
+
+**Request Body (JSON):**
+```json
+{
+  "filename": "tb_cohort_2023.csv",
+  "file_format": "csv"
+}
+```
+
+**Response (HTTP 200 OK):**
+```json
+{
+  "upload_url": "http://localhost:9000/aikosh-datasets/uploads/a3f7c2d1-9b4e-4f2a-bc31-7d8e9f1a2b3c/dataset.csv?...",
+  "file_key": "uploads/a3f7c2d1-9b4e-4f2a-bc31-7d8e9f1a2b3c/dataset.csv",
+  "assessment_id": "a3f7c2d1-9b4e-4f2a-bc31-7d8e9f1a2b3c"
+}
+```
+
+---
+
 ### POST /api/v1/assess
 
-**Purpose:** Submit a dataset for assessment.  
-**Auth:** Bearer API key required.  
-**Content-Type:** `multipart/form-data`
+**Purpose:** Submit dataset metadata and S3 file key for assessment.  
+**Auth:** Required (session cookie or Bearer API key).  
+**Content-Type:** `application/json`
 
-**Request parts:**
-- `file` (required) — dataset file
-- `metadata` (required) — JSON string matching `MetadataFormSchema`
-- `webhook_url` (optional) — override AIKosh webhook URL for this submission
-- `attachments` (optional, multiple) — data dictionary, SOP, consent docs
+**Request Body (JSON):**
+```json
+{
+  "file_key": "uploads/a3f7c2d1-9b4e-4f2a-bc31-7d8e9f1a2b3c/dataset.csv",
+  "metadata": {
+    "dataset_name": "Multi-site TB Cohort Study India 2019–2023",
+    "dataset_version": "1.0.0",
+    "dataset_type": "tabular",
+    "study_type": "cohort",
+    "target_population": "Adults with pulmonary TB",
+    "geographic_coverage": "state",
+    "sensitivity_class": "high_stigma"
+  },
+  "data_dictionary_key": "uploads/a3f7c2d1-9b4e-4f2a-bc31-7d8e9f1a2b3c/data_dictionary.pdf",
+  "sop_key": null,
+  "consent_doc_key": null,
+  "pipeline_script_key": null
+}
+```
 
 **Response (HTTP 202):**
 ```json
@@ -1424,7 +1615,7 @@ send_webhook(assessment_id)
 ### GET /api/v1/assess/{assessment_id}
 
 **Purpose:** Poll assessment status or get final results.  
-**Auth:** Bearer API key required.
+**Auth:** Required (session cookie or Bearer API key).
 
 **Response when processing (HTTP 200):**
 ```json
@@ -1461,7 +1652,7 @@ send_webhook(assessment_id)
 ### GET /api/v1/assess/{assessment_id}/report
 
 **Purpose:** Download full quality report.  
-**Auth:** Bearer API key required.  
+**Auth:** Required (session cookie or Bearer API key).  
 **Query param:** `format` — `json` (default) | `html` | `pdf`
 
 **Response:** Redirects to pre-signed S3 URL for the requested format.
@@ -1471,7 +1662,7 @@ send_webhook(assessment_id)
 ### GET /api/v1/assess/{assessment_id}/audit
 
 **Purpose:** Retrieve full audit log for an assessment.  
-**Auth:** Bearer API key, reviewer/admin role required.
+**Auth:** Required (session cookie with role `reviewer` or Bearer API key with role `reviewer`).
 
 **Response (HTTP 200):**
 ```json
@@ -1495,7 +1686,7 @@ send_webhook(assessment_id)
 ### GET /api/v1/datasets/{dataset_id}/assessments
 
 **Purpose:** List all assessments for a given AIKosh dataset ID.  
-**Auth:** Bearer API key required.  
+**Auth:** Required (session cookie or Bearer API key).  
 **Query params:** `limit` (default 10, max 50), `offset` (default 0)
 
 ---
@@ -1523,43 +1714,59 @@ send_webhook(assessment_id)
 
 ## 17. Authentication & Authorisation
 
-**Mechanism:** API key as Bearer token in `Authorization` header.
+**Mechanism:** Dual-Authentication Model to support both human operators and programmatic scripts.
 
-```
-Authorization: Bearer tkt_live_abc123xyz456...
-```
+### 17.1 User Session Authentication (Browser UI)
+- **Token Delivery:** JWT stored in a secure, `HttpOnly`, `Secure`, `SameSite=Lax` cookie.
+- **Session Duration:** Persistent (e.g. 30 days) to keep users logged in.
+- **Implementation:** FastAPI extracts the token from the cookie, verifies the signature, and loads the user from the `users` table.
 
-**Key format:** `tkt_live_{32 random chars}` for production; `tkt_test_{32 random chars}` for testing.
+### 17.2 Developer API Key Authentication (Machine Integrations)
+- **Mechanism:** API key as Bearer token in the `Authorization` header.
+  ```
+  Authorization: Bearer tkt_live_abc123...
+  ```
+- **Key Format:** `tkt_live_{32 alphanumeric chars}`.
+- **Storage:** Only the SHA-256 hash of the API key is stored in the database.
 
-**Storage:** Only SHA-256 hash stored in `api_keys` table — raw key never stored after generation.
+### 17.3 Roles & Access Boundaries
+- **User Role (`user`):** Can perform uploads, view their own assessments, retrieve their own reports, and cancel/delete their own datasets.
+- **Admin Role (`admin`):** Can list all users and activate/suspend accounts. Admin accounts **cannot** view user datasets, download user data files, or view report details.
 
-**Roles:**
+### 17.4 FastAPI Dependencies (`api/deps.py`)
 
-| Role | Permissions |
-|---|---|
-| `submitter` | POST /assess, GET /assess/{id}, GET /assess/{id}/report, GET /datasets/{id}/assessments |
-| `reviewer` | All submitter permissions + GET /assess/{id}/audit |
-| `admin` | All permissions + key management |
-
-**FastAPI dependency (`api/deps.py`):**
 ```python
-from fastapi import Security, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-import hashlib
+from fastapi import Depends, Security, HTTPException, status, Cookie
+from jose import jwt, JWTError
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
 
-bearer_scheme = HTTPBearer()
-
-async def get_current_api_key(
-    credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
-    db: AsyncSession = Depends(get_db)
-) -> APIKey:
-    key_hash = hashlib.sha256(credentials.credentials.encode()).hexdigest()
-    key = await db.execute(
-        select(APIKey).where(APIKey.key_hash == key_hash, APIKey.is_active == True)
-    )
-    if not key:
-        raise HTTPException(status_code=401, detail="Invalid or inactive API key")
-    return key
+# Session JWT cookie dependency
+async def get_current_user(
+    db: AsyncSession = Depends(get_async_db),
+    session_token: Optional[str] = Cookie(None)
+) -> User:
+    if not session_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
+        )
+    try:
+        payload = jwt.decode(session_token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        user_id: str = payload.get("sub")
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session token"
+        )
+    
+    user = await db.get(User, user_id)
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User inactive or not found"
+        )
+    return user
 ```
 
 ---
@@ -1572,8 +1779,8 @@ Every significant event in the assessment lifecycle writes an audit log entry. E
 
 | Event Type | Component | When |
 |---|---|---|
-| `assessment_submitted` | api | File received, job dispatched |
-| `file_stored_s3` | worker | Dataset file uploaded to S3 |
+| `assessment_submitted` | api | Metadata and S3 key received, job dispatched |
+| `file_stored_s3` | api | Dataset file S3 upload registered |
 | `profiling_started` | profiler | Profiling engine begins |
 | `profiling_complete` | profiler | Profile JSON generated |
 | `domain_scoring_started` | orchestrator | 15 domain scorers dispatched |
@@ -1582,7 +1789,7 @@ Every significant event in the assessment lifecycle writes an audit log entry. E
 | `prs_computed` | prs_engine | PRS calculated |
 | `release_classified` | release_engine | Release class assigned |
 | `report_generated` | report_generator | JSON+HTML+PDF stored to S3 |
-| `dataset_file_deleted` | worker | Raw file purged post-assessment |
+| `dataset_file_deleted` | api | Raw file manually deleted by user request |
 | `assessment_complete` | worker | Assessment marked complete |
 | `aikosh_webhook_sent` | webhook | Webhook POST successful |
 | `aikosh_webhook_failed` | webhook | Webhook POST failed (with retry count) |
@@ -1625,13 +1832,13 @@ If a domain scorer fails after retries, it scores 0 with `confidence=Low` and a 
 | Encryption at rest | S3 server-side encryption (AES-256); PostgreSQL tablespace encryption |
 | Encryption in transit | TLS 1.3 enforced on all API endpoints via Nginx/Ingress |
 | File isolation | Each dataset processed in its own Celery task with a unique temp directory |
-| File deletion | Dataset file deleted from S3 immediately after report generation (Step 12 in pipeline) |
+| File deletion | Dataset file is retained in S3 until the user manually triggers deletion via the UI/API |
 | No raw data in DB | Only profile metadata (statistics, counts, PII flags) stored in DB — never raw data |
 | Path traversal prevention | Filename sanitised with `secure_filename()` on upload |
 | Malicious file prevention | MIME type check + file magic bytes check (not just extension) |
 | API key security | Keys stored as SHA-256 hash only; raw key shown once on creation |
-| Rate limiting | 100 requests/minute per API key via Redis-backed rate limiter |
-| CORS | Restricted to AIKosh domain in production |
+| Rate limiting | 100 req/min per API key; IP-based rate limiting on login/registration (max 5 attempts/min) via Redis |
+| CORS | Restricted to configured frontend origins (e.g., settings.CORS_ORIGINS) with credentials support enabled |
 | SQL injection prevention | All DB queries via SQLAlchemy parameterised queries; no raw SQL |
 | Dependency scanning | `pip-audit` run in CI/CD pipeline on every push |
 | DPDP Act compliance | All personally identifiable metadata fields handled per DPDP Act 2023 |
@@ -1672,8 +1879,11 @@ class Settings(BaseSettings):
     TOOLKIT_VERSION: str = "1.0.0"
     ENVIRONMENT: str = "production"            # development / staging / production
 
-    # Security
-    ALLOWED_ORIGINS: list[str] = ["https://aikosh.indiaai.gov.in"]
+    # Security & Auth
+    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+    JWT_SECRET: str                            # Super secret key for JWT signing
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRY_MINUTES: int = 43200            # Default 30 days
 
     class Config:
         env_file = ".env"
@@ -1822,7 +2032,7 @@ spec:
 | 100 concurrent assessments | Celery workers auto-scale via HPA; Redis handles queue bursts |
 | Database write throughput | Async SQLAlchemy; connection pooling (pool_size=20, max_overflow=10) |
 | Report generation (PDF) | WeasyPrint is CPU-heavy; isolated to worker thread; soft time limit = 60s |
-| S3 throughput | Multipart upload for files >100MB; pre-signed URLs for download avoid proxying |
+| S3 throughput | Pre-signed URLs for direct upload and download avoid API gateway bottlenecks; direct S3 client usage in workers |
 
 **Processing time targets (from PRD):**
 
@@ -1937,7 +2147,7 @@ domains:
 | Async job processing | Celery + Redis | Assessment can take 3 min for 1GB files; synchronous processing would timeout; Celery gives retry, monitoring, and scaling |
 | Two separate Celery queues | `assessment` + `webhook` | Prevents a slow assessment job from blocking lightweight webhook delivery |
 | YAML-driven scoring criteria | `config/domain_criteria.yaml` | MIDAS 2.0 is not finalised; criteria may change post-Delphi review; YAML allows updates without redeploy |
-| Dataset file deletion post-assessment | Delete after report generation | Health research datasets may contain PII; minimal retention reduces risk |
+| Dataset file deletion post-assessment | Retained until manual deletion by user | Keeps dataset available for re-runs and troubleshooting, deleted via UI button/API |
 | Pre-signed S3 URLs for reports | Time-limited (24h) signed URLs | Avoids serving large files through the API server; direct client-to-S3 transfer |
 | PostgreSQL JSONB for evidence/gaps | JSONB columns in domain_scores | Domain evidence is variable-length arrays; JSONB allows querying without rigid schema |
 | Audit log append-only rule | PostgreSQL `CREATE RULE no_delete_audit` | Audit logs must be tamper-evident for government accountability |

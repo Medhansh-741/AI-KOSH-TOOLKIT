@@ -147,10 +147,12 @@ This system is built to scale horizontally using an asynchronous task architectu
 
 ## 5. Security & Authentication
 
-API calls to protected endpoints are secured using a headers-based validation scheme:
-*   Header parameter: `Authorization: Bearer <API_KEY>` or query parameter `?api_key=<API_KEY>`.
-*   **Active Authorization:** Validates incoming keys against the static `API_KEY_SECRET` configured in the `.env` environment variables.
-*   **Planned Authorization:** The database contains an `api_keys` registry table designed to support future database-backed multi-key client and role-based permissions (`submitter`, `reviewer`, `admin`). [TDD §6.1 (API Keys DDL)](docs/TDD_AIKosh_Dataset_Quality_Toolkit.md#61-postgresql-schema-ddl)
+The system uses a **Dual-Authentication Model** to support both secure human browser interactions and programmatic machine integrations:
+*   **User Session Authentication (Browser UI):** JWT stored in a secure, `HttpOnly`, `Secure`, `SameSite=Lax` cookie named `session_token`.
+*   **Developer API Key Authentication (Machine Integrations):** API keys passed as Bearer tokens in the `Authorization` header (`Authorization: Bearer <api_key>`), validated against SHA-256 database hashes.
+*   **Role-Based Access Boundaries:** Supports `user` (submitter), `reviewer`, and `admin` roles. Admins manage user accounts but are strictly prohibited from viewing user datasets or reports to maintain a firm privacy boundary.
+*   **Tenant Data Isolation:** Users only have access to view and manage their own datasets and assessments.
+*   **Manual Deletion:** Dataset files are stored securely in S3/MinIO and only deleted when manually triggered by the user via the UI/API (no automatic purging).
 
 ---
 

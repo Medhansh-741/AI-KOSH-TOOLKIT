@@ -1,3 +1,5 @@
+> **Core Development Philosophy:** "Prioritize building a fully functional, secure, end-to-end integration skeleton (UI -> API -> Worker -> DB/S3 -> Polling) with mock scoring results first, ensuring pipeline stability and security before implementing complex calculation engines."
+
 # Product Requirements Document
 # AIKosh Dataset Quality Evaluation Toolkit
 ### MIDAS-Inspired Automated Quality Assessment System for Health Research Datasets
@@ -629,12 +631,12 @@ The toolkit is a **rule-based, deterministic scoring engine** — not a machine 
 
 ### 17.1 Dataset Upload & Ingestion Module
 
-**Purpose:** Accept dataset files and accompanying metadata, validate format, and pass to the profiling engine.
+**Purpose:** Accept dataset metadata submissions containing S3 storage keys, validate file details, and pass references to the profiling engine.
 
 **Inputs:**
-- Dataset file (CSV, JSON, XLSX, Parquet, FHIR JSON, DICOM manifest, ZIP)
-- Metadata intake form (structured, covering fields required for domains not inferable from data alone)
-- Optional: data dictionary, SOPs, consent documentation (uploaded as attachments)
+- Dataset file S3 key (uploaded directly by client to MinIO/S3 via secure temporary pre-signed URL)
+- Metadata intake form (structured JSON payload covering fields required for domains not inferable from data alone)
+- Optional: data dictionary, SOPs, consent documentation S3 keys (uploaded as attachments via pre-signed URLs)
 
 **Metadata Intake Form Fields (required for scoring):**
 
@@ -665,13 +667,12 @@ The toolkit is a **rule-based, deterministic scoring engine** — not a machine 
 | Provenance pipeline availability | 9 |
 
 **Validation:**
-- File format check
-- File size limit enforcement
-- Schema extraction
-- Encoding detection
-- Duplicate record detection (hash-based)
+- File format and size validation (enforced by frontend before S3 upload, and verified by profiling engine upon reading from S3)
+- Schema extraction (done by profiling engine)
+- Encoding detection (done by profiling engine)
+- Duplicate record detection (hash-based, done by profiling engine)
 
-**Outputs:** Structured dataset object + metadata JSON passed to profiling engine.
+**Outputs:** S3 key references and metadata JSON registered in PostgreSQL and passed to the profiling task.
 
 ---
 
@@ -856,17 +857,18 @@ def classify_release(cqi: float, prs: int, sensitivity_class: str) -> str:
 ---
 
 ### 17.8 Dashboard & Visualisations
-
-**Purpose:** Provide a visual interface for custodians and administrators to review assessment results.
-
-**Dashboard Elements:**
-- **Radar / Spider Chart:** 15-domain score visualisation
-- **CQI Gauge:** 0–100 gauge with band colour coding
-- **PRS Gauge:** 0–100 gauge with band colour coding
-- **Release Class Badge:** Open (green) / Controlled (amber) / Restricted (red)
-- **Domain Score Table:** All 15 domains with score, max, rationale, confidence level
-- **Gap Identification Panel:** Domains below 2, sorted by score ascending
-- **Score History:** CQI and PRS trend across assessment versions (for re-assessments)
+ 
+ **Purpose:** Provide a visual interface for custodians and administrators to review assessment results.
+ 
+ **Dashboard Elements:**
+ - **Radar / Spider Chart:** 15-domain score visualisation
+ - **CQI Gauge:** 0–100 gauge with band colour coding
+ - **PRS Gauge:** 0–100 gauge with band colour coding
+ - **Release Class Badge:** Open (green) / Controlled (amber) / Restricted (red)
+ - **Domain Score Table:** All 15 domains with score, max, rationale, confidence level
+ - **Gap Identification Panel:** Domains below 2, sorted by score ascending
+ - **Score History:** CQI and PRS trend across assessment versions (for re-assessments)
+ - **Transparent Failure Panel:** If the background evaluation job fails (reaches `failed` status), the dashboard must display a clear, human-readable description of the error and traceback to the user for transparent debugging and self-correction (e.g., file parse failures, format mismatches, or missing parameters).
 
 ---
 
@@ -1245,9 +1247,10 @@ All assumptions are clearly flagged in assessment reports.
 | `/api/v1/health` | GET | Health check |
 
 ### Authentication
-- API key-based authentication (Bearer token)
-- AIKosh-issued keys for platform integration
-- Role-based access (submitter / reviewer / admin)
+- **Dual Authentication Model:**
+  - **User Session Auth:** Secure `HttpOnly` cookie-based JWT session for browser human logins (Sign-Up / Sign-In / Log-Out pages on the React UI).
+  - **Developer API Key Auth:** Header-based API Key (`Authorization: Bearer <key>`) for programmatic integration and automated scripts.
+- **Admin Access Boundaries:** Admin users can list and manage user accounts but cannot view or download user datasets or access sensitive assessment reports.
 
 ### Async Pattern
 - `/api/v1/assess` returns immediately with `assessment_id` and `status: processing`
@@ -1325,17 +1328,17 @@ All assumptions are clearly flagged in assessment reports.
 
 ## 21. Data Flow
 
-1. **Upload:** Dataset file + metadata form submitted via API or web UI
-2. **Validation:** Format check, size check, encoding check → reject if invalid
-3. **Storage:** File stored in object storage (temp bucket, encrypted at rest)
-4. **Profiling:** Profiling engine reads file, generates Dataset Profile JSON
-5. **Assessment:** 15 domain scorers run in parallel against Profile JSON + metadata form
-6. **Aggregation:** CQI engine aggregates domain scores; PRS engine computes privacy risk
-7. **Classification:** Release classification engine applies matrix
-8. **Report:** Report generator produces JSON report + renders HTML/PDF
-9. **Integration:** Quality metadata POSTed to AIKosh webhook
-10. **Storage:** Assessment record + report + audit log persisted in PostgreSQL and object storage
-11. **Cleanup:** Temporary dataset file deleted from processing storage after assessment complete (configurable retention)
+1. **Upload:** Client requests a pre-signed S3 upload URL, uploads the dataset file directly to MinIO/S3, and submits the metadata form containing the S3 file key to FastAPI.
+2. **Validation:** Format check, size check, encoding check verified by the backend profiling task → fail assessment if invalid.
+3. **Storage:** File stored in secure object storage (encrypted at rest).
+4. **Profiling:** Profiling engine reads file from S3, generates Dataset Profile JSON.
+5. **Assessment:** 15 domain scorers run in parallel against Profile JSON + metadata form.
+6. **Aggregation:** CQI engine aggregates domain scores; PRS engine computes privacy risk.
+7. **Classification:** Release classification engine applies matrix.
+8. **Report:** Report generator produces JSON report + renders HTML/PDF.
+9. **Integration:** Quality metadata POSTed to AIKosh webhook.
+10. **Storage:** Assessment record + report + audit log persisted in PostgreSQL and object storage.
+11. **Cleanup:** Dataset file retained in object storage until manually deleted by the user via the UI/API.
 
 ---
 
@@ -1432,8 +1435,8 @@ component (VARCHAR)
 | Encryption at rest | AES-256 for all stored files and reports |
 | Encryption in transit | TLS 1.3 minimum on all API endpoints |
 | Dataset isolation | Each dataset processed in isolated execution context |
-| Dataset deletion | Uploaded files deleted from processing storage after assessment completes |
-| No data retention for profiling | Raw dataset content never stored permanently; only derived profile metadata |
+| Dataset deletion | Dataset files and reports retained until manually deleted by the user via UI/API |
+| Secure data storage | Raw dataset content stored in private S3/MinIO bucket under strict tenant isolation; only accessible to the submitter |
 | Access control | Role-based (submitter / reviewer / admin) |
 | API key rotation | Keys rotatable without service interruption |
 | Audit log integrity | Audit logs append-only, cryptographically signed |
@@ -1505,7 +1508,7 @@ The toolkit is considered ready for deployment when:
 | Domains relying on metadata form may produce inflated scores if custodian over-reports | Medium | High | Flag metadata-form-heavy domains with lower confidence; require evidence attachments for high scores on critical domains |
 | AIKosh API integration specifications not fully public | Medium | High | Build integration layer with configurable webhook URL and payload schema; design for easy adaptation |
 | Large datasets (>5GB) exceed processing time targets | Medium | Low | Implement sampling-based profiling for large files; clearly disclose sampling in reports |
-| Privacy-sensitive data uploaded to toolkit | Medium | High | Delete uploaded files immediately after assessment; never persist raw dataset content |
+| Privacy-sensitive data uploaded to toolkit | Medium | High | Keep files in secure private object storage under strict tenant isolation, and allow users to manually delete raw files and reports at any time |
 | ICMR objects to toolkit claiming MIDAS alignment | Low | High | Clearly label as "MIDAS-inspired"; do not claim official MIDAS certification; document all inferences |
 
 ---

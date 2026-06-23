@@ -1,3 +1,5 @@
+> **Core Development Philosophy:** "Prioritize building a fully functional, secure, end-to-end integration skeleton (UI -> API -> Worker -> DB/S3 -> Polling) with mock scoring results first, ensuring pipeline stability and security before implementing complex calculation engines."
+
 # OpenAPI Specification
 # AIKosh Dataset Quality Evaluation Toolkit
 
@@ -60,11 +62,11 @@ The AIKosh Dataset Quality Evaluation Toolkit exposes a REST API that enables:
 
 - **Dataset custodians** to submit health research datasets for automated MIDAS-inspired quality assessment
 - **AIKosh platform** to trigger assessments on dataset submission and receive quality metadata via webhook
-- **Reviewers and administrators** to retrieve assessment results, reports, and audit logs
+- **Reviewers** to retrieve assessment results, reports, and audit logs (administrators manage user states but cannot access dataset results or reports due to privacy boundaries)
 
 The API is asynchronous. Submitting a dataset returns an `assessment_id` immediately. The client either polls the status endpoint or waits for a webhook callback. Processing time is typically under 3 minutes for datasets up to 1GB.
 
-**All responses are JSON. All request bodies are JSON or `multipart/form-data` (for file upload).**
+**All request and response bodies are JSON (with dataset files uploaded directly to MinIO/S3 via temporary pre-signed URLs).**
 
 ---
 
@@ -82,33 +84,36 @@ All endpoints are prefixed with `/api/v1/`. The version is part of the URL path,
 
 ## 3. Authentication
 
-All endpoints except `GET /api/v1/health` require authentication via an API key passed as a Bearer token.
+The system uses a **Dual-Authentication Model** to support both secure human browser interactions and programmatic machine integrations.
 
-**Header:**
-```
-Authorization: Bearer <api_key>
-```
+### 3.1 User Session Authentication (Browser UI)
+- **Mechanism:** JWT stored in a secure, `HttpOnly`, `Secure`, `SameSite=Lax` cookie named `session_token`.
+- **Session Duration:** Persistent session cookies that remain signed in until cleared.
+- **Onboarding:** Instantly activated and logged in upon sign-up.
 
-**Key format:** `tkt_live_{32 alphanumeric characters}` for production.  
-**Test key format:** `tkt_test_{32 alphanumeric characters}` for non-production.
+### 3.2 Developer API Key Authentication (Machine Integrations)
+- **Mechanism:** API key passed as a Bearer token in the `Authorization` header.
+  ```
+  Authorization: Bearer <api_key>
+  ```
+- **Key format:** `tkt_live_{32 alphanumeric characters}`.
+- **Storage:** Stored in the database as SHA-256 hashes for cryptographic safety.
 
-**Roles:**
+### 3.3 Roles & Access Boundaries
 
-| Role | What It Can Do |
+| Role | Permissions & Boundaries |
 |---|---|
-| `submitter` | Submit assessments, view results, download reports |
-| `reviewer` | All submitter permissions + view audit logs |
-| `admin` | All reviewer permissions + manage API keys |
-
-API keys are issued by the AIKosh platform team. Keys are shown once on creation — they are stored as SHA-256 hashes and cannot be retrieved again.
+| `user` (submitter) | Submit assessments, view results, download reports (limited to own datasets only). |
+| `reviewer` | All user permissions + view audit logs. |
+| `admin` | View/manage users list (activate/suspend). Admins **cannot** download user datasets or view user reports. |
 
 **Auth errors:**
 
 | Condition | HTTP Status | Error Code |
 |---|---|---|
-| Missing `Authorization` header | 401 | `missing_auth_header` |
-| Invalid or expired key | 401 | `invalid_api_key` |
-| Insufficient role | 403 | `insufficient_permissions` |
+| Missing session cookie and auth header | 401 | `missing_credentials` |
+| Invalid or expired token/key | 401 | `invalid_credentials` |
+| Insufficient role permissions | 403 | `insufficient_permissions` |
 
 ---
 
@@ -162,7 +167,7 @@ When rate limit is exceeded: HTTP 429 with error code `rate_limit_exceeded`.
 
 ### 6.1 MetadataForm
 
-Submitted alongside the dataset file in `POST /api/v1/assess`. This is a JSON string in the `metadata` field of the multipart form.
+Submitted inside the JSON request body under the key "metadata" in `POST /api/v1/assess`.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
@@ -276,7 +281,7 @@ Returned immediately on `POST /api/v1/assess` (HTTP 202 Accepted).
 
 ### 6.3 AssessmentStatusResponse
 
-Returned by `GET /api/v1/assess/{assessment_id}` when the assessment is still in progress.
+Returned by `GET /api/v1/assess/{assessment_id}` when the assessment is still in progress or failed.
 
 | Field | Type | Description |
 |---|---|---|
@@ -287,6 +292,7 @@ Returned by `GET /api/v1/assess/{assessment_id}` when the assessment is still in
 | `started_at` | string (datetime) \| null | When Celery worker began processing |
 | `completed_at` | string (datetime) \| null | When processing completed (null if still running) |
 | `error_message` | string \| null | Populated only when `status` is `"failed"` |
+| `error_traceback` | string \| null | Full stack trace populated only when `status` is `"failed"` |
 
 **Example (processing):**
 ```json
@@ -297,7 +303,8 @@ Returned by `GET /api/v1/assess/{assessment_id}` when the assessment is still in
   "submitted_at": "2026-06-18T10:30:00Z",
   "started_at": "2026-06-18T10:30:04Z",
   "completed_at": null,
-  "error_message": null
+  "error_message": null,
+  "error_traceback": null
 }
 ```
 
@@ -310,7 +317,8 @@ Returned by `GET /api/v1/assess/{assessment_id}` when the assessment is still in
   "submitted_at": "2026-06-18T10:30:00Z",
   "started_at": "2026-06-18T10:30:04Z",
   "completed_at": "2026-06-18T10:31:12Z",
-  "error_message": "Profiling failed: file encoding could not be determined"
+  "error_message": "Profiling failed: file encoding could not be determined",
+  "error_traceback": "Traceback (most recent call last):\n  File \"app/worker/tasks.py\", line 45, in run_profile\n    profile = profile_dataset(file_path)\n  File \"app/profiler/engine.py\", line 12, in profile_dataset\n    raise ValueError(\"file encoding could not be determined\")\nValueError: file encoding could not be determined"
 }
 ```
 
@@ -637,25 +645,169 @@ All error responses use this structure.
 
 ## 7. Endpoints
 
+### 7.0 Authentication & Admin Endpoints
+
+#### POST /api/v1/auth/register
+**Register a new user account.**
+- **Onboarding Behavior:** Upon registration, the user account is instantly activated and logged in. The backend automatically sets the secure `session_token` cookie so the user does not need a separate activation/login step.
+- **Auth:** Not required
+- **Content-Type:** `application/json`
+- **Request Body:**
+  ```json
+  {
+    "email": "user@example.com",
+    "password": "secure_password"
+  }
+  ```
+- **Response (HTTP 201 Created):** Sets `session_token` cookie and returns:
+  ```json
+  {
+    "user_id": "a3f7c2d1-9b4e-4f2a-bc31-7d8e9f1a2b3c",
+    "email": "user@example.com"
+  }
+  ```
+
+#### POST /api/v1/auth/login
+**Login and receive session token cookie.**
+- **Auth:** Not required
+- **Content-Type:** `application/json`
+- **Request Body:** Same as register.
+- **Response (HTTP 200 OK):** Sets `session_token` cookie.
+  ```json
+  {
+    "message": "Login successful"
+  }
+  ```
+
+#### POST /api/v1/auth/logout
+**Log out and clear session cookie.**
+- **Auth:** Required (valid session)
+- **Response (HTTP 200 OK):**
+  ```json
+  {
+    "message": "Logged out successfully"
+  }
+  ```
+
+#### GET /api/v1/auth/keys
+**List all active developer API keys for the current user.**
+- **Auth:** Required (session cookie only)
+- **Response (HTTP 200 OK):**
+  ```json
+  {
+    "keys": [
+      {
+        "key_id": "b4e8c9d1-0f3a-4e2b-9c31-8d9e0f1a2b3c",
+        "key_prefix": "tkt_live_ab12",
+        "created_at": "2026-06-18T10:30:00Z",
+        "last_used_at": "2026-06-18T11:45:00Z",
+        "expires_at": null
+      }
+    ]
+  }
+  ```
+
+#### POST /api/v1/auth/keys
+**Generate a new database-backed developer API key.**
+- **Auth:** Required (session cookie only)
+- **Response (HTTP 201 Created):** Returns the raw key (only visible once) and key metadata.
+  ```json
+  {
+    "key_id": "b4e8c9d1-0f3a-4e2b-9c31-8d9e0f1a2b3c",
+    "key_prefix": "tkt_live_ab12",
+    "raw_key": "tkt_live_ab12cd34ef56gh78ij90kl12mn34op56",
+    "created_at": "2026-06-18T10:30:00Z",
+    "expires_at": null
+  }
+  ```
+
+#### DELETE /api/v1/auth/keys/{key_id}
+**Revoke / delete a developer API key.**
+- **Auth:** Required (session cookie only)
+- **Response (HTTP 200 OK):**
+  ```json
+  {
+    "message": "API key revoked successfully"
+  }
+  ```
+
+#### GET /api/v1/admin/users
+**List all registered users (Admin only).**
+- **Auth:** Required (role `admin`)
+- **Response (HTTP 200 OK):**
+  ```json
+  {
+    "users": [
+      {
+        "user_id": "a3f7c2d1-9b4e-4f2a-bc31-7d8e9f1a2b3c",
+        "email": "user@example.com",
+        "role": "user",
+        "is_active": true,
+        "created_at": "2026-06-18T10:30:00Z"
+      }
+    ]
+  }
+  ```
+
+#### POST /api/v1/admin/users/{user_id}/toggle-active
+**Suspend or reactivate user account (Admin only).**
+- **Auth:** Required (role `admin`)
+- **Response (HTTP 200 OK):**
+  ```json
+  {
+    "user_id": "a3f7c2d1-9b4e-4f2a-bc31-7d8e9f1a2b3c",
+    "is_active": false
+  }
+  ```
+
+### 7.1 POST /api/v1/assess/upload-url
+
+**Request a temporary pre-signed S3/MinIO upload URL.**
+- **Auth:** Required (session cookie or Bearer API key)
+- **Content-Type:** `application/json`
+- **Request Body:**
+  ```json
+  {
+    "filename": "tb_cohort_2023.csv",
+    "file_format": "csv"
+  }
+  ```
+- **Response (HTTP 200 OK):**
+  ```json
+  {
+    "upload_url": "http://localhost:9000/aikosh-datasets/uploads/a3f7c2d1-9b4e-4f2a-bc31-7d8e9f1a2b3c/dataset.csv?X-Amz-Signature=...",
+    "file_key": "uploads/a3f7c2d1-9b4e-4f2a-bc31-7d8e9f1a2b3c/dataset.csv",
+    "assessment_id": "a3f7c2d1-9b4e-4f2a-bc31-7d8e9f1a2b3c"
+  }
+  ```
+
 ---
 
-### 7.1 POST /api/v1/assess
+### 7.2 POST /api/v1/assess
 
-**Submit a dataset for quality assessment.**
+**Submit dataset metadata and S3 file key for quality assessment.**
+- **Auth:** Required (session cookie or Bearer API key)
+- **Content-Type:** `application/json`
 
-**Auth:** Required (any role)  
-**Content-Type:** `multipart/form-data`
-
-#### Request Parts
-
-| Part Name | Type | Required | Description |
-|---|---|---|---|
-| `file` | file | ✅ | The dataset file. Accepted formats: `.csv`, `.tsv`, `.xlsx`, `.json`, `.parquet`, `.zip` |
-| `metadata` | string (JSON) | ✅ | JSON string matching `MetadataForm` schema (see §6.1) |
-| `data_dictionary` | file | ❌ | Data dictionary file (PDF, CSV, XLSX, or JSON) |
-| `sop` | file | ❌ | Standard Operating Procedure document |
-| `consent_doc` | file | ❌ | Consent documentation |
-| `pipeline_script` | file | ❌ | Provenance pipeline script (`.py`, `.R`, `.sh`, `Makefile`, `Dockerfile`) |
+#### Request Body (JSON)
+```json
+{
+  "file_key": "uploads/a3f7c2d1-9b4e-4f2a-bc31-7d8e9f1a2b3c/dataset.csv",
+  "metadata": {
+    "dataset_name": "Multi-site TB Cohort Study India 2019–2023",
+    "dataset_version": "1.0.0",
+    "dataset_type": "tabular",
+    "study_type": "cohort",
+    "target_population": "Adults with pulmonary TB",
+    "geographic_coverage": "state",
+    "sensitivity_class": "high_stigma"
+  },
+  "data_dictionary_key": "uploads/a3f7c2d1-9b4e-4f2a-bc31-7d8e9f1a2b3c/data_dictionary.pdf",
+  "sop_key": null,
+  "consent_doc_key": null,
+  "pipeline_script_key": null
+}
+```
 
 #### Response
 
@@ -675,14 +827,12 @@ All error responses use this structure.
 
 | HTTP Status | Error Code | When |
 |---|---|---|
-| 400 | `missing_file` | No file part in the request |
-| 400 | `missing_metadata` | No metadata part in the request |
-| 413 | `file_too_large` | File exceeds 5GB limit |
-| 422 | `unsupported_format` | File extension/MIME type not accepted |
-| 422 | `validation_error` | Metadata JSON fails schema validation |
-| 422 | `encoding_error` | File encoding cannot be determined |
+| 400 | `missing_file_key` | No `file_key` in request body |
+| 400 | `missing_metadata` | No `metadata` in request body |
+| 404 | `file_not_found_in_s3` | Key does not exist in S3/MinIO |
+| 422 | `unsupported_format` | File key extension/type is not accepted |
+| 422 | `validation_error` | Metadata fails schema validation |
 | 429 | `rate_limit_exceeded` | Too many requests |
-| 429 | `concurrent_limit_exceeded` | Already have 10 active assessments |
 
 #### Notes
 - `estimated_completion_seconds` is a rough estimate based on file size and current queue depth. Do not use as a hard guarantee.
@@ -750,7 +900,7 @@ The pre-signed URL expires after **24 hours**. To get a fresh URL, call this end
 
 **Retrieve the full audit log for an assessment.**
 
-**Auth:** Required — `reviewer` or `admin` role only  
+**Auth:** Required — `reviewer` role only  
 **Path parameter:** `assessment_id` — UUID
 
 #### Response
@@ -1048,7 +1198,7 @@ Complete list of all machine-readable error codes.
 | Event Type | Component |
 |---|---|
 | `assessment_submitted` | api |
-| `file_stored_s3` | worker |
+| `file_stored_s3` | api |
 | `profiling_started` | profiler |
 | `profiling_complete` | profiler |
 | `domain_scoring_started` | orchestrator |
@@ -1057,7 +1207,7 @@ Complete list of all machine-readable error codes.
 | `prs_computed` | prs_engine |
 | `release_classified` | release_engine |
 | `report_generated` | report_generator |
-| `dataset_file_deleted` | worker |
+| `dataset_file_deleted` | api |
 | `assessment_complete` | worker |
 | `aikosh_webhook_sent` | webhook |
 | `aikosh_webhook_failed` | webhook |
@@ -1093,6 +1243,7 @@ servers:
 
 security:
   - BearerAuth: []
+  - CookieAuth: []
 
 components:
   securitySchemes:
@@ -1101,6 +1252,11 @@ components:
       scheme: bearer
       bearerFormat: API Key
       description: "API key in format: tkt_live_{32chars}"
+    CookieAuth:
+      type: apiKey
+      in: cookie
+      name: session_token
+      description: "JWT session token stored in HttpOnly cookie"
 
   schemas:
 
@@ -1276,6 +1432,9 @@ components:
           format: date-time
           nullable: true
         error_message:
+          type: string
+          nullable: true
+        error_traceback:
           type: string
           nullable: true
 
@@ -1573,38 +1732,68 @@ components:
 # ── Paths ──────────────────────────────────────────────────────
 paths:
 
+  /api/v1/assess/upload-url:
+    post:
+      summary: Request pre-signed upload URL
+      operationId: getUploadUrl
+      tags: [Assessment]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename, file_format]
+              properties:
+                filename:
+                  type: string
+                file_format:
+                  type: string
+      responses:
+        '200':
+          description: Upload URL generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  upload_url:
+                    type: string
+                  file_key:
+                    type: string
+                  assessment_id:
+                    type: string
+                    format: uuid
+
   /api/v1/assess:
     post:
-      summary: Submit a dataset for quality assessment
+      summary: Submit assessment details
       operationId: submitAssessment
       tags: [Assessment]
       requestBody:
         required: true
         content:
-          multipart/form-data:
+          application/json:
             schema:
               type: object
-              required: [file, metadata]
+              required: [file_key, metadata]
               properties:
-                file:
+                file_key:
                   type: string
-                  format: binary
-                  description: Dataset file (.csv, .tsv, .xlsx, .json, .parquet, .zip)
                 metadata:
+                  $ref: '#/components/schemas/MetadataForm'
+                data_dictionary_key:
                   type: string
-                  description: JSON string matching MetadataForm schema
-                data_dictionary:
+                  nullable: true
+                sop_key:
                   type: string
-                  format: binary
-                sop:
+                  nullable: true
+                consent_doc_key:
                   type: string
-                  format: binary
-                consent_doc:
+                  nullable: true
+                pipeline_script_key:
                   type: string
-                  format: binary
-                pipeline_script:
-                  type: string
-                  format: binary
+                  nullable: true
       responses:
         '202':
           description: Assessment queued
@@ -1613,13 +1802,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AssessmentSubmitResponse'
         '400':
-          description: Missing file or metadata
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '413':
-          description: File too large
+          description: Missing parameters or key not found
           content:
             application/json:
               schema:
@@ -1631,7 +1814,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '429':
-          description: Rate limit or concurrent limit exceeded
+          description: Rate limit exceeded
           content:
             application/json:
               schema:
@@ -1718,6 +1901,7 @@ paths:
       tags: [Audit]
       security:
         - BearerAuth: []
+        - CookieAuth: []
       parameters:
         - name: assessment_id
           in: path
@@ -1799,6 +1983,364 @@ paths:
                       $ref: '#/components/schemas/AssessmentListItem'
         '404':
           description: No assessments found for this dataset
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/register:
+    post:
+      summary: Register a new user account
+      operationId: registerUser
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  pattern: "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$"
+                  description: "Must contain at least 8 characters, one uppercase, one lowercase, one number, and one special character."
+                  example: "SecureP@ss123"
+      responses:
+        '201':
+          description: User registered successfully, session cookie set
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: session_token=...; HttpOnly; Secure; SameSite=Lax
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: string
+                    format: uuid
+                    example: a3f7c2d1-9b4e-4f2a-bc31-7d8e9f1a2b3c
+                  email:
+                    type: string
+                    format: email
+                    example: user@example.com
+        '400':
+          description: Invalid email or password, or user already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/login:
+    post:
+      summary: Login and receive session token cookie
+      operationId: loginUser
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  pattern: "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$"
+                  description: "Must contain at least 8 characters, one uppercase, one lowercase, one number, and one special character."
+                  example: "SecureP@ss123"
+      responses:
+        '200':
+          description: Login successful, session cookie set
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: session_token=...; HttpOnly; Secure; SameSite=Lax
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Login successful
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/logout:
+    post:
+      summary: Log out and clear session cookie
+      operationId: logoutUser
+      tags: [Authentication]
+      security:
+        - CookieAuth: []
+      responses:
+        '200':
+          description: Logged out successfully, session cookie cleared
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: session_token=; Max-Age=0; HttpOnly; Secure; SameSite=Lax
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logged out successfully
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/keys:
+    get:
+      summary: List all active developer API keys for the current user
+      operationId: listApiKeys
+      tags: [Authentication]
+      security:
+        - CookieAuth: []
+      responses:
+        '200':
+          description: List of active API keys retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key_id:
+                          type: string
+                          format: uuid
+                          example: b4e8c9d1-0f3a-4e2b-9c31-8d9e0f1a2b3c
+                        key_prefix:
+                          type: string
+                          example: tkt_live_ab12
+                        created_at:
+                          type: string
+                          format: date-time
+                          example: 2026-06-18T10:30:00Z
+                        last_used_at:
+                          type: string
+                          format: date-time
+                          nullable: true
+                          example: 2026-06-18T11:45:00Z
+                        expires_at:
+                          type: string
+                          format: date-time
+                          nullable: true
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      summary: Generate a new database-backed developer API key
+      operationId: createApiKey
+      tags: [Authentication]
+      security:
+        - CookieAuth: []
+      responses:
+        '201':
+          description: Developer API key generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key_id:
+                    type: string
+                    format: uuid
+                    example: b4e8c9d1-0f3a-4e2b-9c31-8d9e0f1a2b3c
+                  key_prefix:
+                    type: string
+                    example: tkt_live_ab12
+                  raw_key:
+                    type: string
+                    example: tkt_live_ab12cd34ef56gh78ij90kl12mn34op56
+                  created_at:
+                    type: string
+                    format: date-time
+                    example: 2026-06-18T10:30:00Z
+                  expires_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/keys/{key_id}:
+    delete:
+      summary: Revoke / delete a developer API key
+      operationId: revokeApiKey
+      tags: [Authentication]
+      security:
+        - CookieAuth: []
+      parameters:
+        - name: key_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: API key revoked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: API key revoked successfully
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: API key not found or belongs to another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/users:
+    get:
+      summary: List all registered users (Admin only)
+      operationId: listUsers
+      tags: [Admin]
+      security:
+        - CookieAuth: []
+      responses:
+        '200':
+          description: List of registered users retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        user_id:
+                          type: string
+                          format: uuid
+                          example: a3f7c2d1-9b4e-4f2a-bc31-7d8e9f1a2b3c
+                        email:
+                          type: string
+                          format: email
+                          example: user@example.com
+                        role:
+                          type: string
+                          example: user
+                        is_active:
+                          type: boolean
+                          example: true
+                        created_at:
+                          type: string
+                          format: date-time
+                          example: 2026-06-18T10:30:00Z
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions (Admin only)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/admin/users/{user_id}/toggle-active:
+    post:
+      summary: Suspend or reactivate user account (Admin only)
+      operationId: toggleUserActive
+      tags: [Admin]
+      security:
+        - CookieAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: User state toggled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: string
+                    format: uuid
+                    example: a3f7c2d1-9b4e-4f2a-bc31-7d8e9f1a2b3c
+                  is_active:
+                    type: boolean
+                    example: false
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient permissions (Admin only)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
           content:
             application/json:
               schema:
