@@ -3,7 +3,7 @@
 ![AIKosh Logo](https://img.shields.io/badge/AIKosh-Dataset%20Quality-blue?style=for-the-badge)
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen?style=flat-square)](#)
-[![Python Version](https://img.shields.io/badge/python-3.10-blue?style=flat-square&logo=python)](file:///c:/Users/medha/OneDrive/Desktop/AI-KOSH-TOOLKIT/backend/requirements.txt)
+[![Python Version](https://img.shields.io/badge/python-3.10-blue?style=flat-square&logo=python)](backend/requirements.txt)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16.x-blue?style=flat-square&logo=postgresql)](#)
 [![Celery](https://img.shields.io/badge/Celery-5.4.0-green?style=flat-square&logo=celery)](#)
 [![Redis](https://img.shields.io/badge/Redis-7.2-red?style=flat-square&logo=redis)](#)
@@ -13,11 +13,15 @@
 
 ---
 
+### [Quick Start](#8-quick-start) &middot; [API Docs](#12-api-documentation) &middot; [Architecture](#3-system-architecture) &middot; [Cheatsheet](#14-common-commands-cheatsheet) &middot; [Troubleshooting](#15-troubleshooting--faq)
+
+---
+
 ## Table of Contents
 1. [Overview & Concept](#1-overview--concept)
 2. [Key Features](#2-key-features)
 3. [System Architecture](#3-system-architecture)
-4. [Tech Stack](#4-tech-stack)
+4. [Tech Stack & Decision Notes](#4-tech-stack--decision-notes)
 5. [Security & Authentication](#5-security--authentication)
 6. [Living Documentation & Reference Disclaimer](#6-living-documentation--reference-disclaimer)
 7. [Prerequisites](#7-prerequisites)
@@ -25,8 +29,11 @@
 9. [Configuration Reference](#9-configuration-reference)
 10. [Development Setup (Without Docker)](#10-development-setup-without-docker)
 11. [Database Migrations (Alembic)](#11-database-migrations-alembic)
-12. [Testing](#12-testing)
-13. [Production Deployment (Kubernetes)](#13-production-deployment-kubernetes)
+12. [API Documentation](#12-api-documentation)
+13. [Testing](#13-testing)
+14. [Common Commands Cheatsheet](#14-common-commands-cheatsheet)
+15. [Troubleshooting & FAQ](#15-troubleshooting--faq)
+16. [Production Deployment (Kubernetes)](#16-production-deployment-kubernetes)
 
 ---
 
@@ -42,13 +49,14 @@ This system is built to scale horizontally using an asynchronous task architectu
 
 ## 2. Key Features
 
-| Feature | Description | Reference |
+| Feature | Description | Reference Docs |
 | :--- | :--- | :--- |
-| **CQI Scoring Engine** | Evaluates datasets against 15 clinical and technical domains, calculating a normalized CQI score (0–100) and mapping it to certification bands (Diamond, Platinum, Gold, Silver, Bronze, Remediation). | [TDD §4.1](file:///c:/Users/medha/OneDrive/Desktop/AI-KOSH-TOOLKIT/docs/TDD_AIKosh_Dataset_Quality_Toolkit.md) |
-| **PRS Calculation** | Computes Patient Risk Scores (PRS) based on data sensitivity levels, de-identification methods, and the application of Differential Privacy. | [TDD §4.2](file:///c:/Users/medha/OneDrive/Desktop/AI-KOSH-TOOLKIT/docs/TDD_AIKosh_Dataset_Quality_Toolkit.md) |
-| **Automated Profiling** | Background workers compute structural and statistical summaries of uploaded datasets using a fast Arrow/Pandas ingestion pipeline. | [dataset_profile.py](file:///c:/Users/medha/OneDrive/Desktop/AI-KOSH-TOOLKIT/backend/app/models/dataset_profile.py) |
-| **Compliance Auditing** | Tracks all evaluation job transitions and model overrides in an append-only, deletion-protected audit log table. | [audit_log.py](file:///c:/Users/medha/OneDrive/Desktop/AI-KOSH-TOOLKIT/backend/app/models/audit_log.py) |
-| **Multi-Format Reports** | Generates downloadable and shareable evaluation reports in JSON, HTML, and print-ready PDF formats. | [assessment_result.py](file:///c:/Users/medha/OneDrive/Desktop/AI-KOSH-TOOLKIT/backend/app/models/assessment_result.py) |
+| **CQI Scoring Engine** | Evaluates datasets against 15 clinical and technical domains, calculating a normalized CQI score (0–100) and mapping it to certification bands (Diamond, Platinum, Gold, Silver, Bronze, Remediation). | [TDD §4.1 (CQI Algorithm)](docs/TDD_AIKosh_Dataset_Quality_Toolkit.md#41-cqi-scoring-algorithm) |
+| **PRS Calculation** | Computes Patient Risk Scores (PRS) based on data sensitivity levels, de-identification methods, and the application of Differential Privacy. | [TDD §4.2 (PRS Algorithm)](docs/TDD_AIKosh_Dataset_Quality_Toolkit.md#42-prs-algorithm) |
+| **Automated Profiling** | Background workers compute structural and statistical summaries of uploaded datasets using a fast Arrow/Pandas ingestion pipeline. | [dataset_profile.py](./backend/app/models/dataset_profile.py) |
+| **Compliance Auditing** | Tracks all evaluation job transitions and model overrides in an append-only, deletion-protected audit log table. | [audit_log.py](backend/app/models/audit_log.py) & [TDD §6.1 (Audit Logs DDL)](docs/TDD_AIKosh_Dataset_Quality_Toolkit.md#61-postgresql-schema-ddl) |
+| **Multi-Format Reports** | Generates downloadable and shareable evaluation reports in JSON, HTML, and print-ready PDF formats. | [assessment_result.py](backend/app/models/assessment_result.py) & [TDD §7 (Reports Generation)](docs/TDD_AIKosh_Dataset_Quality_Toolkit.md#7-reports-generation-service) |
+| **Supported File Formats** | Tabular and semi-structured file support (CSV, Excel ingestion). | [PRD §23 (Supported Formats)](docs/PRD_AIKosh_Dataset_Quality_Toolkit.md#23-supported-dataset-formats) |
 
 ---
 
@@ -117,34 +125,39 @@ This system is built to scale horizontally using an asynchronous task architectu
 
 ---
 
-## 4. Tech Stack
+## 4. Tech Stack & Decision Notes
 
-| Technology | Purpose | Configuration File |
+| Technology | Purpose | Decision Note / Rationale |
 | :--- | :--- | :--- |
-| **FastAPI** | High-performance, asynchronous REST API gateway. | [backend/app/main.py](file:///c:/Users/medha/OneDrive/Desktop/AI-KOSH-TOOLKIT/backend/app/main.py) |
-| **React (Vite)** | Responsive single-page application dashboard. | [frontend/package.json](file:///c:/Users/medha/OneDrive/Desktop/AI-KOSH-TOOLKIT/frontend/package.json) |
-| **PostgreSQL 16** | Core relational persistence with custom enums, check constraints, and append-only rules. | [docker-compose.yml](file:///c:/Users/medha/OneDrive/Desktop/AI-KOSH-TOOLKIT/docker-compose.yml) |
-| **Celery** | Asynchronous task queue for long-running dataset profiling and scoring. | [backend/requirements.txt](file:///c:/Users/medha/OneDrive/Desktop/AI-KOSH-TOOLKIT/backend/requirements.txt) |
-| **Redis** | Message broker for Celery queues and task result caching. | [docker-compose.yml](file:///c:/Users/medha/OneDrive/Desktop/AI-KOSH-TOOLKIT/docker-compose.yml) |
-| **MinIO** | S3-compatible local object storage for raw dataset uploads and generated reports. | [docker-compose.yml](file:///c:/Users/medha/OneDrive/Desktop/AI-KOSH-TOOLKIT/docker-compose.yml) |
+| **FastAPI** | High-performance API Gateway | Chosen for high-speed asynchronous request handling, automated OpenAPI/Swagger generation, and built-in type validation via Pydantic. |
+| **React (Vite)** | Responsive frontend client dashboard | Vite provides near-instant reload times during local development compared to CRA. |
+| **PostgreSQL 16** | Core transactional database | Offers strict ACID compliance, transactional integrity, relational safety, check constraints, and native enum validation. [TDD §6](docs/TDD_AIKosh_Dataset_Quality_Toolkit.md#6-database-design--full-schema) |
+| **Celery** | Asynchronous background processing | Offloads long-running CPU-intensive CSV parsing, dataset profiling, and scoring calculations from the FastAPI web thread. [TDD §5](docs/TDD_AIKosh_Dataset_Quality_Toolkit.md#5-background-task-processing) |
+| **Redis** | Broker & cache | Low-latency, high-throughput in-memory data store ideal for Celery task queuing and temporary result caching. |
+| **MinIO** | S3-compatible local object storage | Allows us to write standard cloud-ready S3 code (Boto3) locally without internet dependencies or cloud costs. |
+| **Flower** | Celery task monitoring dashboard | Provides real-time visual tracking of worker queues, task states, execution times, and pipeline bottlenecks. |
+| **WeasyPrint** | PDF report generator backend | Compiles styled HTML/CSS templates into high-fidelity, print-ready PDF files on the backend. [TDD §7](docs/TDD_AIKosh_Dataset_Quality_Toolkit.md#7-reports-generation-service) |
+| **Pandas & PyArrow** | Tabular data ingestion & profiling | Enables blazing fast memory-mapped data ingestion and column-level statistical profiling of large tabular CSV files. |
+| **Pydantic** | Schema validation & configuration | Standardizes request/response payloads, maps settings from environment variables, and catches runtime type errors. |
+| **Alembic** | Relational schema migrations | Ensures repeatable, reversible, and version-controlled database schema updates across all environments. [TDD §6.3](docs/TDD_AIKosh_Dataset_Quality_Toolkit.md#63-migrations-strategy-alembic) |
+| **Docker & Compose**| Container orchestration | Standardizes the runtime environment across 8 different microservices, eliminating the "works on my machine" problem. |
+| **Kubernetes (K8s)**| Production hosting & auto-scaling | Automates container scaling (via HPA), service routing, high availability, and resource constraints isolation. |
 
 ---
 
 ## 5. Security & Authentication
 
 API calls to protected endpoints are secured using a headers-based validation scheme:
-*   Header parameter: `X-API-Key`
-*   Database backed table: `api_keys` (stores SHA-256 hashes of client secrets)
-*   Roles available: `submitter`, `reviewer`, `admin`
-
-Only clients possessing a valid API key with appropriate permissions (e.g. `submitter` for job submissions, `admin` for metadata overrides) can execute evaluations.
+*   Header parameter: `Authorization: Bearer <API_KEY>` or query parameter `?api_key=<API_KEY>`.
+*   **Active Authorization:** Validates incoming keys against the static `API_KEY_SECRET` configured in the `.env` environment variables.
+*   **Planned Authorization:** The database contains an `api_keys` registry table designed to support future database-backed multi-key client and role-based permissions (`submitter`, `reviewer`, `admin`). [TDD §6.1 (API Keys DDL)](docs/TDD_AIKosh_Dataset_Quality_Toolkit.md#61-postgresql-schema-ddl)
 
 ---
 
 ## 6. Living Documentation & Reference Disclaimer
 
 > [!IMPORTANT]
-> The architectural design patterns, dataset questionnaires, and schemas found inside the **[docs/](file:///c:/Users/medha/OneDrive/Desktop/AI-KOSH-TOOLKIT/docs/)** folder are **living reference guidelines**. They represent target specifications but are subject to modification and refinements as development progresses and integration challenges arise. The active code base remains the source of truth.
+> The architectural design patterns, dataset questionnaires, and schemas found inside the **[docs/](docs/)** folder are **living reference guidelines**. They represent target specifications but are subject to modification and refinements as development progresses and integration challenges arise. The active code base remains the source of truth.
 
 ---
 
@@ -160,35 +173,49 @@ Ensure you have the following system-level software installed before setup:
 
 ## 8. Quick Start
 
-Run the entire platform locally with a single command:
+Deploy the entire stack locally in 3 steps:
 
 ```bash
-# 1. Start all 8 docker compose services
-docker compose up --build
+# 1. Clone the repository and set up environment configurations
+cp .env.example .env
 
-# 2. Apply database schemas
+# 2. Build and start all 8 container services in the background
+docker compose up --build -d
+
+# 3. Apply database migrations to PostgreSQL
 docker compose exec backend alembic upgrade head
-
-# 3. Access the platform
-# - React Web Dashboard: http://localhost:3000
-# - API Swagger Docs: http://localhost:8000/docs
-# - MinIO Object Storage Panel: http://localhost:9001 (minioadmin / minioadmin)
-# - Flower Celery Monitor: http://localhost:5555
 ```
+
+The services will be available at:
+*   **React Dashboard:** http://localhost:3000
+*   **FastAPI OpenAPI Docs:** http://localhost:8000/docs
+*   **MinIO Console Panel:** http://localhost:9001 (minioadmin / minioadmin)
+*   **Flower Celery Monitoring:** http://localhost:5555
 
 ---
 
 ## 9. Configuration Reference
 
-System behavior is configured using environment variables defined in `.env` files. You can copy the template files:
-*   Root compose configuration: [`.env.example`](file:///c:/Users/medha/OneDrive/Desktop/AI-KOSH-TOOLKIT/.env.example) -> `.env`
-*   Backend local overrides: [`backend/.env.example`](file:///c:/Users/medha/OneDrive/Desktop/AI-KOSH-TOOLKIT/backend/.env.example) -> `backend/.env`
+<details>
+<summary><b>Click to expand Environment Variables Reference Table...</b></summary>
 
-Key configurations:
-*   `POSTGRES_DB`: Name of target PostgreSQL database (`aikosh_quality`).
-*   `REDIS_URL`: Redis connection URL (`redis://redis:6379/0`).
-*   `S3_ENDPOINT_URL`: Object storage connection endpoint (`http://minio:9000`).
-*   `API_KEY_SECRET`: Encryption key for static fallback checks.
+System configurations are loaded from the root `.env` file:
+
+| Variable | Default Value | Description |
+| :--- | :--- | :--- |
+| `POSTGRES_USER` | `postgres` | Username for the core database instance. |
+| `POSTGRES_PASSWORD` | `postgres` | Password for the database instance. |
+| `POSTGRES_DB` | `aikosh_quality` | Database name. |
+| `POSTGRES_HOST` | `postgres` | Database container host address. |
+| `POSTGRES_PORT` | `5432` | Database container port. |
+| `REDIS_URL` | `redis://redis:6379/0` | Connection broker URL for Celery. |
+| `S3_ENDPOINT_URL` | `http://minio:9000` | Local endpoint for S3-compatible file storage. |
+| `S3_ACCESS_KEY` | `minioadmin` | S3 console access key. |
+| `S3_SECRET_KEY` | `minioadmin` | S3 console secret key. |
+| `S3_BUCKET_NAME` | `aikosh-datasets` | Bucket name for uploaded datasets and reports. |
+| `API_KEY_SECRET` | `tkt_secret_super_secure_key_12345678` | System-wide static API Key. |
+
+</details>
 
 ---
 
@@ -203,11 +230,11 @@ To run the components locally on your host machine for faster debugging cycles:
    python -m venv .venv
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
-2. Install Python dependencies:
+2. Install dependencies listed in requirements file:
    ```bash
    pip install -r requirements.txt
    ```
-3. Run Alembic migrations:
+3. Run Alembic migrations (*Note: Ensure a PostgreSQL instance is running on `localhost:5432` and the database `aikosh_quality` exists before running this*):
    ```bash
    alembic upgrade head
    ```
@@ -221,7 +248,7 @@ To run the components locally on your host machine for faster debugging cycles:
    ```bash
    cd frontend
    ```
-2. Install Node packages:
+2. Install packages listed in package.json:
    ```bash
    npm install
    ```
@@ -250,7 +277,15 @@ Database schema modifications are managed using Alembic.
 
 ---
 
-## 12. Testing
+## 12. API Documentation
+
+Once the backend service is running, the interactive API documentation is available at:
+*   **Swagger UI (Interactive API tester):** [http://localhost:8000/docs](http://localhost:8000/docs)
+*   **ReDoc (Clean reading mode):** [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+---
+
+## 13. Testing
 
 Run the test suites using `pytest` inside the backend container:
 
@@ -262,9 +297,40 @@ Test coverage focuses on scoring formulas, PRS risk calculations, dataset metada
 
 ---
 
-## 13. Production Deployment (Kubernetes)
+## 14. Common Commands Cheatsheet
 
-Production manifests are housed inside the **[k8s/](file:///c:/Users/medha/OneDrive/Desktop/AI-KOSH-TOOLKIT/k8s/)** directory, targeting the namespace `aikosh-quality-toolkit`.
+| Command | Action |
+| :--- | :--- |
+| `docker compose up -d` | Start all stack services in the background. |
+| `docker compose down` | Stop all running containers. |
+| `docker compose logs -f backend` | Stream logs for the FastAPI web service. |
+| `docker compose exec backend alembic upgrade head` | Run all database migrations. |
+| `docker compose exec backend alembic downgrade -1` | Rollback the last database migration. |
+| `docker compose exec backend pytest` | Run the backend test suites. |
+| `docker compose exec postgres psql -U postgres -d aikosh_quality` | Open an interactive SQL shell inside PostgreSQL. |
+| `docker compose restart backend` | Restart the web app container. |
+
+---
+
+## 15. Troubleshooting & FAQ
+
+#### Q1: "port 5432 is already in use" on startup
+*   **Reason:** You have a local instance of PostgreSQL running on your host machine.
+*   **Fix:** Stop your host PostgreSQL service, or modify the port mapping in your `.env` file (e.g. `POSTGRES_PORT=5433`) and rebuild.
+
+#### Q2: Alembic connection refused or "database does not exist"
+*   **Reason:** Postgres container takes a few seconds to spin up and load its database configurations.
+*   **Fix:** Wait 5-10 seconds for PostgreSQL to become healthy, then re-run the `alembic upgrade head` migration.
+
+#### Q3: S3/MinIO bucket error "aikosh-datasets does not exist"
+*   **Reason:** S3 endpoint URL mismatches or MinIO was started without bucket initialization.
+*   **Fix:** Make sure the bucket name is defined as `aikosh-datasets` in your `.env`. Celery workers will automatically attempt to create the bucket if it is missing during the first file upload assessment task.
+
+---
+
+## 16. Production Deployment (Kubernetes)
+
+Production manifests are housed inside the **[k8s/](k8s/)** directory, targeting the namespace `aikosh-quality-toolkit`.
 
 To deploy the cluster services:
 ```bash
