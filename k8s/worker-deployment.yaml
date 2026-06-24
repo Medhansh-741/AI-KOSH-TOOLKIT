@@ -54,6 +54,12 @@ spec:
               value: us-east-1
             - name: API_KEY_SECRET
               value: tkt_secret_super_secure_key_12345678
+            - name: JWT_SECRET
+              value: supersecretjwtsessionkeychangeinproduction123456!
+            - name: AIKOSH_WEBHOOK_URL
+              value: ""
+            - name: AIKOSH_WEBHOOK_SECRET
+              value: ""
           resources:
             requests:
               cpu: "1"
@@ -118,6 +124,12 @@ spec:
               value: us-east-1
             - name: API_KEY_SECRET
               value: tkt_secret_super_secure_key_12345678
+            - name: JWT_SECRET
+              value: supersecretjwtsessionkeychangeinproduction123456!
+            - name: AIKOSH_WEBHOOK_URL
+              value: ""
+            - name: AIKOSH_WEBHOOK_SECRET
+              value: ""
           resources:
             requests:
               cpu: "250m"

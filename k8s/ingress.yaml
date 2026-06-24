@@ -20,8 +20,11 @@ spec:
           image: aikosh-quality-toolkit-frontend:latest
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 80
+            - containerPort: 3000
               name: http
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: https://toolkit.aikosh.gov.in
           resources:
             requests:
               cpu: "100m"
@@ -40,7 +43,7 @@ metadata:
 spec:
   ports:
     - port: 80
-      targetPort: 80
+      targetPort: 3000
   selector:
     app: frontend
 ---

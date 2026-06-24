@@ -63,23 +63,23 @@ The AIKosh platform integrates as an external consumer — it submits datasets v
 | **ORM models** (all 9 tables) | ✅ Complete | `backend/app/models/` |
 | **DB schema** (PostgreSQL DDL) | ✅ Complete | `backend/alembic/` |
 | **Health endpoint** | ✅ Complete | `GET /api/v1/health` |
-| **Frontend** (Login + Register pages) | ✅ Working | `frontend/src/pages/` |
-| **Assessment submission** | ⚠️ Skeleton | DB record created; no S3 upload URL or Celery dispatch yet |
-| **Pre-signed S3 upload URL** (`POST /assess/upload-url`) | ❌ Not built | Spec in [TDD §16](docs/TDD_AIKosh_Dataset_Quality_Toolkit.md) |
-| **Celery assessment pipeline** (13 steps) | ❌ Stub | `worker/tasks.py` returns mock `{status: "complete"}` |
-| **Dataset profiler** | ❌ Stub | `engine/profiler.py` returns hardcoded mock |
-| **15 Domain scorers** | ❌ Not built | Abstract base class only in `engine/scoring.py` |
-| **CQI engine** | ❌ Not built | Formula spec in [TDD §10](docs/TDD_AIKosh_Dataset_Quality_Toolkit.md) |
-| **PRS engine** | ❌ Not built | Formula spec in [TDD §11](docs/TDD_AIKosh_Dataset_Quality_Toolkit.md) |
-| **Release classifier** | ⚠️ Partial | Logic exists but not wired into pipeline |
-| **Report generator** (JSON + HTML + PDF) | ❌ Not built | Spec in [TDD §13](docs/TDD_AIKosh_Dataset_Quality_Toolkit.md) |
-| **S3 client wrapper** | ❌ Not built | `backend/app/storage/s3_client.py` missing |
-| **AIKosh webhook sender** | ❌ Not built | Spec in [TDD §14](docs/TDD_AIKosh_Dataset_Quality_Toolkit.md) |
-| **Audit logger** | ❌ Not built | Spec in [TDD §18](docs/TDD_AIKosh_Dataset_Quality_Toolkit.md) |
-| **Frontend** (Upload, Dashboard, Report pages) | ⚠️ Placeholder | Pages exist without real data or charts |
-| **Frontend** (Admin page) | ❌ Not built | |
-| **Frontend URL routing** | ⚠️ Manual state | Uses `currentView` state; no real URL paths |
-| **Next.js + TypeScript migration** | ❌ Planned | Currently React 18 + Vite |
+| **Frontend** (Login + Register pages) | ✅ Complete | Next.js auth layout and views |
+| **Assessment submission** | ✅ Complete | Full schema intake and S3 key validation |
+| **Pre-signed S3 upload URL** (`POST /assess/upload-url`) | ✅ Complete | Client direct uploads to S3/MinIO bucket |
+| **Celery assessment pipeline** (13 steps) | ✅ Complete | Async pipeline with state machine, audit log triggers |
+| **Dataset profiler** | ✅ Complete | Real pandas-based PII, completeness, and size scanner |
+| **15 Domain scorers** | ✅ Complete | Confirmed score criteria evaluation from YAML configuration |
+| **CQI engine** | ✅ Complete | Composite Quality Index calculations (0-100) |
+| **PRS engine** | ✅ Complete | Privacy Risk Score and baseline/stigma adjustments |
+| **Release classifier** | ✅ Complete | Real CQI x PRS release eligibility matrix |
+| **Report generator** (JSON + HTML + PDF) | ✅ Complete | Pre-signed URL distribution of JSON/HTML/PDF templates |
+| **S3 client wrapper** | ✅ Complete | `backend/app/storage/s3_client.py` |
+| **AIKosh webhook sender** | ✅ Complete | Webhook callbacks dispatch on completion |
+| **Audit logger** | ✅ Complete | Strict append-only postgres audit ledger |
+| **Frontend** (Upload, Dashboard, Report pages) | ✅ Complete | 8-step metadata questionnaire wizard, Recharts, gauges |
+| **Frontend** (Admin page) | ✅ Complete | Admin moderation panel |
+| **Frontend URL routing** | ✅ Complete | Next.js 14 App Router paths |
+| **Next.js + TypeScript migration** | ✅ Complete | 100% complete Next.js port |
 
 ---
 

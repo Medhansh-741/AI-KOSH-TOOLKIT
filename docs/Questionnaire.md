@@ -6,11 +6,11 @@
 ---
 
 **Document Version:** 1.1  
-**Status:** Draft  
+**Status:** Final  
 **Last Updated:** June 24, 2026  
 **Prepared For:** AIKosh / IndiaAI Mission  
 **References:** PRD v1.1 (Section 17.1, 18), TDD v1.1, OpenAPI Spec v1.1  
-**Classification:** Internal Working Document
+**Classification:** Public Release
 
 ---
 

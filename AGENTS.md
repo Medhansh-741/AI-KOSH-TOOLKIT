@@ -160,7 +160,7 @@ On ANY step failure:
     → No partial results returned
 ```
 
-**⚠️ Current Status:** Steps 1-3 are NOT wired. `run_assessment` is a stub returning `{status: "complete"}`. The full pipeline needs implementation.
+**✅ Current Status:** The 13-step async Celery assessment pipeline is fully wired and functional.
 
 ---
 
@@ -173,23 +173,23 @@ On ANY step failure:
 | ORM Models (all 9 tables) | ✅ Complete | `backend/app/models/` |
 | DB Schema (PostgreSQL DDL) | ✅ Complete | `backend/alembic/` |
 | Health endpoint | ✅ Complete | `backend/app/api/v1/health.py` |
-| Assessment submission (skeleton) | ⚠️ Skeleton | `backend/app/api/v1/assess.py` — DB record created, no S3 or Celery dispatch |
-| Pre-signed S3 upload URL endpoint | ❌ Not built | Spec in TDD §16, OpenAPI §7.1 |
-| Celery assessment pipeline | ❌ Stub | `backend/app/worker/tasks.py` — returns mock |
-| Dataset profiler | ❌ Stub/Mock | `backend/app/engine/profiler.py` — hardcoded JSON |
-| 15 Domain scorers | ❌ Not built | `backend/app/engine/scoring.py` — abstract base only |
-| CQI engine | ❌ Not built | Spec in TDD §10, PRD §17.5 |
-| PRS engine | ❌ Not built | Spec in TDD §11, PRD §17.5 |
-| Release classifier | ⚠️ Partial | `backend/app/engine/` — may exist but not wired |
-| Report generator | ❌ Not built | Spec in TDD §13 |
-| S3 client wrapper | ❌ Not built | `backend/app/storage/s3_client.py` missing |
-| AIKosh webhook sender | ❌ Not built | Spec in TDD §14 |
-| Audit logger | ❌ Not built | Spec in TDD §18 |
-| Frontend (Login + Register) | ✅ Working | `frontend/src/pages/LoginPage.jsx`, `RegisterPage.jsx` |
-| Frontend (Upload, Dashboard, Report) | ⚠️ Placeholder | `frontend/src/pages/` — pages exist, no real data |
-| Frontend (Admin page) | ❌ Not built | |
-| Frontend router | ⚠️ Manual state | `frontend/src/App.jsx` — uses `currentView` state, no URL routing |
-| Next.js migration | ❌ Planned | Currently React + Vite |
+| Assessment submission | ✅ Complete | `backend/app/api/v1/assess.py` |
+| Pre-signed S3 upload URL endpoint | ✅ Complete | `backend/app/api/v1/assess.py` |
+| Celery assessment pipeline | ✅ Complete | `backend/app/worker/tasks.py` |
+| Dataset profiler | ✅ Complete | `backend/app/engine/profiler/profiler.py` |
+| 15 Domain scorers | ✅ Complete | `backend/app/engine/domains/` |
+| CQI engine | ✅ Complete | `backend/app/engine/scoring/cqi.py` |
+| PRS engine | ✅ Complete | `backend/app/engine/scoring/prs.py` |
+| Release classifier | ✅ Complete | `backend/app/engine/scoring/release_classifier.py` |
+| Report generator | ✅ Complete | `backend/app/reports/generator.py` |
+| S3 client wrapper | ✅ Complete | `backend/app/storage/s3_client.py` |
+| AIKosh webhook sender | ✅ Complete | `backend/app/integration/aikosh_webhook.py` |
+| Audit logger | ✅ Complete | `backend/app/audit/logger.py` |
+| Frontend (Login + Register) | ✅ Complete | `frontend/app/(auth)/` |
+| Frontend (Upload, Dashboard, Report) | ✅ Complete | `frontend/app/(app)/` |
+| Frontend (Admin page) | ✅ Complete | `frontend/app/(app)/admin/` |
+| Frontend router | ✅ Complete | Next.js App Router |
+| Next.js migration | ✅ Complete | Next.js 14 App Router |
 
 ---
 
@@ -207,14 +207,14 @@ On ANY step failure:
 | DB models | `backend/app/models/` (9 files) |
 | Pydantic schemas | `backend/app/schemas/` |
 | Celery app config | `backend/app/worker/celery_app.py` |
-| Celery tasks (pipeline) | `backend/app/worker/tasks.py` ← STUB |
-| Profiling engine | `backend/app/engine/profiler.py` ← STUB |
-| Scoring engine base | `backend/app/engine/scoring.py` |
+| Celery tasks (pipeline) | `backend/app/worker/tasks.py` |
+| Profiling engine | `backend/app/engine/profiler/profiler.py` |
+| Scoring engine base | `backend/app/engine/domains/base.py` |
 | App config / env vars | `backend/app/config.py` |
 | Docker orchestration | `docker-compose.yml` |
 | Kubernetes manifests | `k8s/` |
-| Frontend pages | `frontend/src/pages/` |
-| Frontend API client | `frontend/src/api/client.js` |
+| Frontend pages | `frontend/app/` |
+| Frontend API client | `frontend/lib/api/client.ts` |
 | Domain scoring YAML config | `backend/config/domain_criteria.yaml` |
 | Alembic migrations | `backend/alembic/versions/` |
 

@@ -1,0 +1,50 @@
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const url = `${API_URL}${path}`;
+  const headers = new Headers(options.headers);
+
+  if (!(options.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  // Include session cookies for browser authentication
+  options.credentials = "include";
+  options.headers = headers;
+
+  const response = await fetch(url, options);
+
+  if (!response.ok) {
+    let errorMessage = `HTTP error! status: ${response.status}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.detail || errorMessage;
+    } catch (_) {
+      // ignore
+    }
+    throw new Error(errorMessage);
+  }
+
+  if (response.status === 204) {
+    return {} as T;
+  }
+
+  return response.json();
+}
+
+export const api = {
+  get<T>(path: string, options?: RequestInit) {
+    return request<T>(path, { ...options, method: "GET" });
+  },
+  post<T>(path: string, body?: any, options?: RequestInit) {
+    const isFormData = body instanceof FormData;
+    return request<T>(path, {
+      ...options,
+      method: "POST",
+      body: isFormData ? body : JSON.stringify(body),
+    });
+  },
+  delete<T>(path: string, options?: RequestInit) {
+    return request<T>(path, { ...options, method: "DELETE" });
+  },
+};
