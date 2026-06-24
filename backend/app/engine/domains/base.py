@@ -22,3 +22,12 @@ class BaseDomainScorer(ABC):
     def score(self) -> DomainScoreResult:
         """Computes the 0-4 score. Must be overridden by subclasses."""
         pass
+
+    def _determine_confidence(self, data_signals: int, meta_signals: int) -> str:
+        """High if majority from DATA, Low if entirely from META."""
+        if data_signals >= meta_signals:
+            return "High"
+        if meta_signals > 0 and data_signals > 0:
+            return "Medium"
+        return "Low"
+

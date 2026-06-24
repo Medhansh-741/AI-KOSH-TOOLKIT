@@ -29,6 +29,7 @@ from app.engine.profiler.profiler import DatasetProfiler
 from app.engine.scoring.cqi import compute_cqi
 from app.engine.scoring.prs import compute_prs
 from app.engine.scoring.release_classifier import ReleaseClassificationEngine
+from app.engine.domains import DOMAIN_SCORERS
 from app.reports.generator import report_generator
 
 logger = logging.getLogger(__name__)
@@ -141,10 +142,10 @@ def run_assessment(self, assessment_id: str, file_key: str, metadata: Dict[str, 
             db.add(profile_rec)
             db.commit()
 
-            # Step 6: Run 15 placeholder scorers -> write 15 domain_scores records to DB
-            logger.info("Running 15 placeholder domain scorers...")
+            # Step 6: Run 15 domain scorers -> write 15 domain_scores records to DB
+            logger.info("Running 15 real domain scorers...")
             
-            # Load criteria (optional placeholder)
+            # Load criteria
             criteria = {}
             try:
                 criteria_path = "/app/config/domain_criteria.yaml"
@@ -159,33 +160,64 @@ def run_assessment(self, assessment_id: str, file_key: str, metadata: Dict[str, 
             domain_scores_list = []
             domain_scores_dict = {}
             
-            for i in range(1, 16):
-                domain_key, domain_name = domains_mapping[i]
+            for ScorerClass in DOMAIN_SCORERS:
+                domain_number = ScorerClass.DOMAIN_NUMBER
+                domain_name = ScorerClass.DOMAIN_NAME
                 
                 # Check Domain 11 applicability special case
-                if i == 11 and not assessment.domain_11_applicable:
-                    score = None
+                if domain_number == 11 and not assessment.domain_11_applicable:
+                    score_val = None
                     not_applicable = True
-                    rationale = "Dataset contains no synthetic or simulated data. Domain excluded from CQI calculation."
+                    rationale_val = "Dataset contains no synthetic or simulated data. Domain excluded from CQI calculation."
+                    evidence_val = []
+                    gaps_val = []
+                    confidence_val = "Low"
                 else:
-                    score = 2
-                    not_applicable = False
-                    rationale = "Placeholder score for domain."
+                    domain_key = domains_mapping[domain_number][0]
+                    domain_criteria = criteria.get(domain_key, {})
+                    
+                    try:
+                        scorer_inst = ScorerClass(profile_json, metadata_dict, domain_criteria)
+                        result = scorer_inst.score()
+                        
+                        # Extra protection for Domain 11 inside scorer
+                        if domain_number == 11 and result.not_applicable:
+                            score_val = None
+                            not_applicable = True
+                            rationale_val = result.rationale
+                            evidence_val = []
+                            gaps_val = []
+                            confidence_val = "Low"
+                        else:
+                            score_val = result.score
+                            not_applicable = result.not_applicable
+                            rationale_val = result.rationale
+                            evidence_val = result.evidence_items
+                            gaps_val = result.gaps
+                            confidence_val = result.confidence
+                    except Exception as scorer_err:
+                        logger.error(f"Error executing scorer for Domain {domain_number}: {scorer_err}")
+                        score_val = 0
+                        not_applicable = False
+                        rationale_val = f"Scoring failed due to error: {str(scorer_err)} — defaulted to 0"
+                        evidence_val = []
+                        gaps_val = [f"Scoring failed: {str(scorer_err)}"]
+                        confidence_val = "Low"
                 
                 ds = DomainScore(
                     assessment_id=UUID(assessment_id),
-                    domain_number=i,
+                    domain_number=domain_number,
                     domain_name=domain_name,
-                    score=score,
+                    score=score_val,
                     not_applicable=not_applicable,
-                    rationale=rationale,
-                    evidence_items=[],
-                    gaps=[],
-                    confidence_level="Low"
+                    rationale=rationale_val,
+                    evidence_items=evidence_val,
+                    gaps=gaps_val,
+                    confidence_level=confidence_val
                 )
                 db.add(ds)
                 domain_scores_list.append(ds)
-                domain_scores_dict[i] = score
+                domain_scores_dict[domain_number] = score_val
                 
             db.commit()
             
@@ -196,10 +228,18 @@ def run_assessment(self, assessment_id: str, file_key: str, metadata: Dict[str, 
             prs_res = compute_prs(profile_json, metadata_dict)
 
             # Step 9: Run release classification
+            domain_7_score_obj = next((ds for ds in domain_scores_list if ds.domain_number == 7), None)
+            domain_7_passed = domain_7_score_obj is not None and domain_7_score_obj.score == 4
+            dp_verified = bool(metadata_dict.get("differential_privacy_applied", False) and 
+                               metadata_dict.get("dp_epsilon") is not None and 
+                               domain_7_passed)
+            
             release_res = ReleaseClassificationEngine.classify_release(
-                cqi_res.cqi,
-                prs_res.prs,
-                metadata_dict.get("sensitivity_class", "standard")
+                cqi=cqi_res.cqi,
+                prs=prs_res.prs,
+                prs_band=prs_res.band,
+                sensitivity_class=metadata_dict.get("sensitivity_class", "standard"),
+                differential_privacy_verified=dp_verified
             )
 
             # Step 10: Generate reports (JSON + HTML + PDF) -> upload to S3

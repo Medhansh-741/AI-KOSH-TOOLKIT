@@ -66,9 +66,10 @@ def compute_prs(profile: Dict[str, Any], metadata: Dict[str, Any]) -> PRSResult:
     sensitivity = metadata.get("sensitivity_class", "standard")
     multiplier = SENSITIVITY_MULTIPLIERS.get(sensitivity, 1.0)
     adjusted = baseline * multiplier
-    prs = min(100, round(adjusted))
+    prs = min(100, int(adjusted + 0.5))
     band = next(label for threshold, label in PRS_BANDS if prs >= threshold)
     trace = f"baseline={baseline} ({basis}) × multiplier={multiplier} ({sensitivity}) = {adjusted} → PRS={prs}"
+
 
     return PRSResult(
         baseline_risk=baseline,

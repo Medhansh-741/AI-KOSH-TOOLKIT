@@ -85,21 +85,24 @@ def test_run_assessment_pipeline_success(mock_send_webhook, mock_s3_client, db_s
     # Verify 15 domain scores exist
     scores = db_session.query(DomainScore).filter(DomainScore.assessment_id == assessment_id).all()
     assert len(scores) == 15
+    expected_scores = {
+        1: 0, 2: 1, 3: 0, 4: 1, 5: 3, 6: 2, 7: 0, 8: 1, 9: 1, 10: 0,
+        11: None, 12: 1, 13: 1, 14: 3, 15: 1
+    }
     for s in scores:
+        assert s.score == expected_scores[s.domain_number]
         if s.domain_number == 11:
-            assert s.score is None
             assert s.not_applicable is True
         else:
-            assert s.score == 2
             assert s.not_applicable is False
 
     # Verify AssessmentResult
     result_rec = db_session.query(AssessmentResult).filter(AssessmentResult.assessment_id == assessment_id).first()
     assert result_rec is not None
-    assert result_rec.cqi_band == "Silver"
-    assert result_rec.prs_band == "Low"
+    assert result_rec.cqi_band == "Bronze"
+    assert result_rec.prs_band == "High"
 
-    assert result_rec.release_classification == "Controlled"
+    assert result_rec.release_classification == "Restricted"
 
     # Verify AuditLogs
     audit_logs = db_session.query(AuditLog).filter(AuditLog.assessment_id == assessment_id).all()
