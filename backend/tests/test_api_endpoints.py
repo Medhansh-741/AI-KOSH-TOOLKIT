@@ -120,7 +120,8 @@ async def run_api_endpoint_tests():
             # List API Keys
             keys_list = await client.get("/api/v1/auth/keys")
             assert keys_list.status_code == 200
-            assert any(k["key_id"] == key_id for k in keys_list.json())
+            assert any(k["key_id"] == key_id for k in keys_list.json()["keys"])
+
 
             # Revoke API Key
             revoke_resp = await client.delete(f"/api/v1/auth/keys/{key_id}")

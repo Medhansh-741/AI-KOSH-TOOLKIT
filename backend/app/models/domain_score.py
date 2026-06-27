@@ -26,7 +26,9 @@ class DomainScore(Base):
     confidence_level = Column(Enum("High", "Medium", "Low", name="confidence_level"), nullable=True)
     data_signals_count = Column(Integer, nullable=True)
     meta_signals_count = Column(Integer, nullable=True)
+    inferred = Column(Boolean, default=False, server_default=text("false"), nullable=False)
     scored_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+
 
 
     # Relationships

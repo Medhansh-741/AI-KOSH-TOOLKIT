@@ -8,9 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 
 from app.database import get_async_db
-from app.api.deps import get_current_user, get_user_assessment
+from app.api.deps import get_current_user, get_user_assessment, get_current_active_reviewer
 from app.models.user import User
 from app.models.assessment import Assessment
+from app.models.audit_log import AuditLog
 from app.models.dataset_metadata import DatasetMetadata
 from app.schemas.metadata_form import MetadataForm
 from app.schemas.assessment import (
@@ -25,11 +26,13 @@ from app.schemas.assessment import (
     ReleaseClassification,
     ProfileSummary,
     ReportURLs,
-    DomainScoreObject
+    DomainScoreObject,
+    AuditLogItemResponse
 )
 from app.storage.s3_client import s3_client
 from app.worker.tasks import run_assessment
 from app.audit.logger import audit_logger
+
 
 router = APIRouter(prefix="/assess", tags=["assessment"])
 
@@ -291,4 +294,26 @@ async def get_assessment_status_route(
         error_message=assessment.error_message,
         error_traceback=assessment.error_traceback
     )
+
+@router.get(
+    "/{assessment_id}/audit",
+    response_model=List[AuditLogItemResponse],
+    responses={
+        401: {"description": "Not authenticated"},
+        403: {"description": "Forbidden - Reviewer role required"},
+        404: {"description": "Assessment not found"}
+    }
+)
+async def get_assessment_audit_logs(
+    assessment_id: str,
+    reviewer: User = Depends(get_current_active_reviewer),
+    assessment: Assessment = Depends(get_user_assessment),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """Returns full audit trail for an assessment (Reviewer or Admin role required)."""
+    stmt = select(AuditLog).where(AuditLog.assessment_id == assessment.assessment_id).order_by(AuditLog.event_timestamp.asc())
+    result = await db.execute(stmt)
+    logs = result.scalars().all()
+    return logs
+
 

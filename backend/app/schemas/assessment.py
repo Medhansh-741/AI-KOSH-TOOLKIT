@@ -53,6 +53,8 @@ class DomainScoreObject(BaseModel):
     rationale: Optional[str] = None
     evidence_items: List[str] = []
     gaps: List[str] = []
+    inferred: bool = False
+
 
 class CQIResult(BaseModel):
     value: float
@@ -108,3 +110,36 @@ class AssessmentResultResponse(BaseModel):
     profile_summary: ProfileSummary
     report_urls: ReportURLs
     audit_log_id: UUID
+
+class AuditLogItemResponse(BaseModel):
+    log_id: UUID
+    assessment_id: UUID
+    event_type: str
+    event_timestamp: datetime
+    component: Optional[str] = None
+    event_detail: Dict[str, Any] = {}
+    severity: str = "INFO"
+
+    model_config = ConfigDict(from_attributes=True)
+
+class AssessmentListItem(BaseModel):
+    assessment_id: UUID
+    dataset_id: str
+    status: str
+    submission_timestamp: datetime
+    completion_timestamp: Optional[datetime] = None
+    cqi: Optional[float] = None
+    cqi_band: Optional[str] = None
+    prs: Optional[int] = None
+    prs_band: Optional[str] = None
+    release_classification: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class PaginatedAssessmentListResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    items: List[AssessmentListItem]
+
+

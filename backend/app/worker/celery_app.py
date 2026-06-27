@@ -16,5 +16,10 @@ celery_app.conf.update(
     enable_utc=True,
     task_track_started=True,
     task_acks_late=True,
-    worker_prefetch_multiplier=1
+    worker_prefetch_multiplier=1,
+    task_routes={
+        "app.worker.tasks.run_assessment": {"queue": "assessment"},
+        "app.worker.tasks.send_webhook": {"queue": "webhook"},
+    }
 )
+

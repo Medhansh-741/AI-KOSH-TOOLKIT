@@ -4,6 +4,7 @@ from typing import Literal
 
 from app.api.deps import get_user_assessment
 from app.models.assessment import Assessment
+from app.storage.s3_client import s3_client
 
 router = APIRouter(prefix="/assess", tags=["reports"])
 
@@ -21,9 +22,11 @@ async def download_report(
 ):
     """Generates a temporary S3 pre-signed URL to download the report in the requested format."""
     # Enforces BOLA protection and admin boundaries automatically via get_user_assessment
+    presigned_url = s3_client.generate_presigned_url(f"reports/{assessment.assessment_id}/report.{format}")
     redirect = RedirectResponse(
-        url=f"http://localhost:9000/aikosh-datasets/reports/{assessment.assessment_id}/report.{format}",
+        url=presigned_url,
         status_code=status.HTTP_302_FOUND
     )
     redirect.headers["Cache-Control"] = "no-store"
     return redirect
+

@@ -42,8 +42,9 @@ def test_profiler_standards_detection():
     data = {
         "icd_col": ["U07.1", "A09.9", "B97.29"],
         "loinc_col": ["29463-7", "883-9", "4544-3"],
-        "snomed_col": ["some code", "another code", "third"]
+        "snomed_col": ["22298006", "386661006", "44054006"]
     }
+
     df = pd.DataFrame(data)
     profiler = DatasetProfiler(df)
     profile = profiler.profile_dataset()

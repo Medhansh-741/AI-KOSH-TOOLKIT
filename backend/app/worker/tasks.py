@@ -356,6 +356,31 @@ def run_assessment(self, assessment_id: str, file_key: str, metadata: Dict[str, 
             )
             
             # Step 13: Dispatch webhook task (separate Celery queue: "webhook")
+            domain_slugs = {
+                1: "1_annotation_labelling_reliability",
+                2: "2_metadata_completeness",
+                3: "3_documentation_user_guidance",
+                4: "4_population_representativeness",
+                5: "5_data_structure_interoperability",
+                6: "6_ai_analytics_readiness",
+                7: "7_privacy_identifiability",
+                8: "8_security_access_governance",
+                9: "9_provenance_workflow_transparency",
+                10: "10_ethical_social_accountability",
+                11: "11_synthetic_simulated_data",
+                12: "12_stewardship_governance",
+                13: "13_model_linkage_integrity",
+                14: "14_environmental_sustainability",
+                15: "15_continuous_curation_feedback"
+            }
+            formatted_domain_scores = {}
+            for ds in domain_scores_list:
+                slug = domain_slugs.get(ds.domain_number, f"{ds.domain_number}_domain")
+                formatted_domain_scores[slug] = {
+                    "score": None if ds.not_applicable else ds.score,
+                    "confidence": None if ds.not_applicable else ds.confidence_level
+                }
+
             webhook_payload = {
                 "assessment_id": assessment_id,
                 "dataset_id": assessment.dataset_id,
@@ -366,11 +391,12 @@ def run_assessment(self, assessment_id: str, file_key: str, metadata: Dict[str, 
                 "prs": int(prs_res.prs),
                 "prs_band": prs_res.band,
                 "release_classification": release_res.classification,
-                "domain_scores": {str(ds.domain_number): ds.score for ds in domain_scores_list},
+                "domain_scores": formatted_domain_scores,
                 "domain_11_applicable": assessment.domain_11_applicable,
                 "report_url": f"http://localhost:8000/api/v1/assess/{assessment_id}/report?format=html",
                 "audit_log_id": str(complete_audit.log_id)
             }
+
             
             # Trigger send_webhook
             send_webhook.delay(assessment_id, settings.AIKOSH_WEBHOOK_URL, webhook_payload)

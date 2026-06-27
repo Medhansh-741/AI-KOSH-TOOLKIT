@@ -1,9 +1,12 @@
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from typing import Optional, List, Literal
 from datetime import date
 
 class MetadataForm(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
     dataset_name: str = Field(..., min_length=5)
+
     dataset_version: Optional[str] = Field(None, max_length=100)
     dataset_type: Literal["tabular", "imaging", "text", "multimodal"]
     study_type: Literal["RCT", "cohort", "cross_sectional", "registry", "observational", "case_control", "other"]
