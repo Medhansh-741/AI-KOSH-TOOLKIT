@@ -9,6 +9,7 @@ ENV/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
 .coverage
 htmlcov/
 *.log
@@ -17,9 +18,8 @@ htmlcov/
 node_modules/
 dist/
 dist-ssr/
-*.local
-.svelte-kit/
 .next/
+*.local
 
 # Environment variables
 .env
@@ -47,18 +47,23 @@ data/
 minio_data/
 postgres_data/
 
+# Secrets & Certificates
+*.pem
+*.key
+*.crt
+secrets/
+
+# Testing artifacts
+.playwright-mcp/
+*.png
+
+# Auto-generated tool output
+graphify-out/
+
 # Local Agent Sandbox
 .agents/
 skills-lock.json
 
-
-# Added by Phase 1
-frontend/dist/
-frontend/.next/
-frontend/node_modules/
-backend/.hypothesis/
-backend/.pytest_cache/
-backend/__pycache__/
-**/__pycache__/
-package.json
-package-lock.json
+# Root-only lockfiles (frontend package files are tracked)
+/package.json
+/package-lock.json

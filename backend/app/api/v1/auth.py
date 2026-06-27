@@ -66,7 +66,7 @@ def create_session_cookie(response: Response, user_id: str):
         expires=expire.strftime("%a, %d-%b-%Y %H:%M:%S GMT"),
         path="/",
         samesite="lax",
-        secure=False  # Set to True in production with HTTPS
+        secure=(settings.ENVIRONMENT == "production")
     )
 
 @router.post(
@@ -170,7 +170,7 @@ async def logout(response: Response):
         expires=0,
         path="/",
         samesite="lax",
-        secure=False
+        secure=(settings.ENVIRONMENT == "production")
     )
     return {"message": "Logged out successfully"}
 
@@ -188,8 +188,8 @@ async def get_me(current_user: User = Depends(get_current_user)):
 
 @router.get(
     "/keys",
-    response_model=list[ApiKeyResponse],
     responses={
+        200: {"description": "List of API keys"},
         401: {"description": "Not authenticated or invalid token"}
     }
 )
@@ -200,7 +200,8 @@ async def list_keys(
     result = await db.execute(
         select(ApiKey).where(ApiKey.user_id == current_user.id, ApiKey.is_active == True)
     )
-    return result.scalars().all()
+    keys = result.scalars().all()
+    return {"keys": [ApiKeyResponse.model_validate(k) for k in keys]}
 
 @router.post(
     "/keys",

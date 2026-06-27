@@ -1,8 +1,9 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Literal, Dict, Any
 from datetime import datetime
 from uuid import UUID
 from app.schemas.metadata_form import MetadataForm
+
 class UploadUrlRequest(BaseModel):
     filename: str
     file_format: str
@@ -25,16 +26,21 @@ class AssessmentSubmitResponse(BaseModel):
     status: str = "queued"
     estimated_completion_seconds: int = 180
     poll_url: str
-    submission_timestamp: datetime
     submitted_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 class AssessmentStatusResponse(BaseModel):
     assessment_id: UUID
     status: Literal["queued", "processing", "complete", "failed"]
     dataset_id: Optional[str] = None
-    submission_timestamp: datetime
-    completion_timestamp: Optional[datetime] = None
+    submitted_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
     error_message: Optional[str] = None
+    error_traceback: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DomainScoreObject(BaseModel):
@@ -83,12 +89,9 @@ class ProfileSummary(BaseModel):
     sample_rows: Optional[int] = None
 
 class ReportURLs(BaseModel):
-    json_url: str = Field(..., alias="json")
-    html_url: str = Field(..., alias="html")
-    pdf_url: str = Field(..., alias="pdf")
-
-    class Config:
-        populate_by_name = True
+    json: str
+    html: str
+    pdf: str
 
 class AssessmentResultResponse(BaseModel):
     assessment_id: UUID
@@ -96,7 +99,7 @@ class AssessmentResultResponse(BaseModel):
     dataset_id: Optional[str] = None
     dataset_name: str
     toolkit_version: str
-    computed_at: datetime
+    assessed_at: datetime
     domain_11_applicable: bool
     cqi: CQIResult
     prs: PRSResult

@@ -27,8 +27,8 @@ export default function DashboardPage() {
     e.preventDefault();
     if (!newKeyName.trim()) return;
     try {
-      const res = await createApiKeyMutation.mutateAsync(newKeyName);
-      setCreatedKeyRaw(res.api_key);
+      const res = await createApiKeyMutation.mutateAsync({ owner_name: newKeyName, role: "submitter" });
+      setCreatedKeyRaw(res.raw_key);
       setNewKeyName("");
     } catch (err) {
       console.error(err);
@@ -215,10 +215,10 @@ export default function DashboardPage() {
                       className="flex items-center justify-between p-3 rounded-lg border border-slate-850 bg-slate-950/40 hover:bg-slate-950/70 transition-all"
                     >
                       <div className="space-y-0.5 max-w-[70%]">
-                        <span className="text-xs font-bold text-slate-350 block truncate">{key.name}</span>
+                        <span className="text-xs font-bold text-slate-350 block truncate">{key.owner_name}</span>
                         <div className="flex items-center gap-1 text-[10px] text-slate-500">
                           <span className="font-mono bg-slate-900 border border-slate-800 px-1 rounded text-indigo-400">
-                            {key.prefix}...
+                            {key.key_prefix}...
                           </span>
                           <span>•</span>
                           <span>Created {new Date(key.created_at).toLocaleDateString()}</span>

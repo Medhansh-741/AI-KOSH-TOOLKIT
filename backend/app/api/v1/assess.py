@@ -127,7 +127,6 @@ async def submit_assessment(
         status="queued",
         estimated_completion_seconds=180,
         poll_url=f"/api/v1/assess/{assessment_id}",
-        submission_timestamp=new_assessment.submission_timestamp,
         submitted_at=new_assessment.submission_timestamp
     )
 
@@ -151,9 +150,10 @@ async def list_user_assessments(
             assessment_id=a.assessment_id,
             status=a.status,
             dataset_id=a.dataset_id,
-            submission_timestamp=a.submission_timestamp,
-            completion_timestamp=a.completion_timestamp,
-            error_message=a.error_message
+            submitted_at=a.submission_timestamp,
+            completed_at=a.completion_timestamp,
+            error_message=a.error_message,
+            error_traceback=a.error_traceback
         ) for a in assessments
     ]
 
@@ -271,7 +271,7 @@ async def get_assessment_status_route(
                 dataset_id=assessment.dataset_id,
                 dataset_name=metadata_rec.dataset_name if metadata_rec else "Unknown",
                 toolkit_version=assessment.toolkit_version,
-                computed_at=assessment.result.computed_at or assessment.completion_timestamp or datetime.now(timezone.utc),
+                assessed_at=assessment.result.computed_at or assessment.completion_timestamp or datetime.now(timezone.utc),
                 domain_11_applicable=assessment.domain_11_applicable,
                 cqi=cqi_obj,
                 prs=prs_obj,
@@ -286,8 +286,9 @@ async def get_assessment_status_route(
         assessment_id=assessment.assessment_id,
         status=assessment.status,
         dataset_id=assessment.dataset_id,
-        submission_timestamp=assessment.submission_timestamp,
-        completion_timestamp=assessment.completion_timestamp,
-        error_message=assessment.error_message
+        submitted_at=assessment.submission_timestamp,
+        completed_at=assessment.completion_timestamp,
+        error_message=assessment.error_message,
+        error_traceback=assessment.error_traceback
     )
 

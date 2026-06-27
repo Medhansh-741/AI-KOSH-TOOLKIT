@@ -8,10 +8,13 @@ export interface User {
 
 export interface ApiKey {
   key_id: string;
-  name: string;
-  prefix: string;
+  owner_name: string;
+  key_prefix: string;
+  role: string;
+  is_active: boolean;
   created_at: string;
   last_used_at: string | null;
+  expires_at: string | null;
 }
 
 export interface MetadataForm {
@@ -125,8 +128,10 @@ export interface Assessment {
   file_size_bytes: number;
   s3_file_key: string;
   submitted_at: string;
-  completion_timestamp: string | null;
+  started_at: string | null;
+  completed_at: string | null;
   error_message: string | null;
+  error_traceback: string | null;
 }
 
 export interface AssessmentResultResponse {
@@ -135,11 +140,17 @@ export interface AssessmentResultResponse {
   dataset_id: string;
   dataset_name: string;
   toolkit_version: string;
-  computed_at: string;
+  assessed_at: string;
   domain_11_applicable: boolean;
   cqi: CQIResult;
   prs: PRSResult;
   release: ReleaseClassification;
   domain_scores: DomainScore[];
   profile_summary: ProfileSummary;
+  report_urls: {
+    json: string | null;
+    html: string | null;
+    pdf: string | null;
+  };
+  audit_log_id: string;
 }

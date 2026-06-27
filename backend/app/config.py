@@ -1,11 +1,12 @@
 import os
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     # App Settings
     PROJECT_NAME: str = "AIKosh Dataset Quality Evaluation Toolkit"
     API_V1_STR: str = "/api/v1"
+    ENVIRONMENT: str = "development"
     
     # Postgres Database
     POSTGRES_USER: str = Field(default="postgres")
@@ -49,6 +50,12 @@ class Settings(BaseSettings):
     AIKOSH_WEBHOOK_SECRET: str = Field(default="")
     MAX_FILE_SIZE_BYTES: int = Field(default=5368709120)
     PROFILING_SAMPLE_ROWS: int = Field(default=100000)
+
+    @field_validator("JWT_SECRET")
+    @classmethod
+    def jwt_secret_min_length(cls, v):
+        assert len(v) >= 32, "JWT_SECRET must be at least 32 characters long"
+        return v
 
     model_config = SettingsConfigDict(
         env_file=".env",

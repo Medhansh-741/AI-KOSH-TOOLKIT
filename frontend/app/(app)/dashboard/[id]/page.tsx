@@ -181,7 +181,7 @@ export default function AssessmentDetailsPage({ params }: PageProps) {
           <div className="flex flex-wrap items-center gap-3.5 text-xs text-slate-400 pt-1">
             <div className="flex items-center gap-1">
               <Calendar className="h-3.5 w-3.5 text-slate-500" />
-              <span>Assessed: {formatDate(res.computed_at)}</span>
+              <span>Assessed: {formatDate(res.assessed_at)}</span>
             </div>
             <span>•</span>
             <div className="flex items-center gap-1">

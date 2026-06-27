@@ -242,11 +242,6 @@ export default function UploadPage() {
         data_dictionary_uploaded: !!dataDictFile || formData.data_dictionary_uploaded,
         provenance_pipeline_available: !!provenanceFile || formData.provenance_pipeline_available,
         linked_model_ids,
-        // Include keys in custom fields so they reside in raw_form_json
-        data_dictionary_key: ddKey || undefined,
-        provenance_pipeline_key: provKey || undefined,
-        sop_key: sopKey || undefined,
-        consent_doc_key: consentKey || undefined,
       };
 
       // Submit assessment
@@ -255,6 +250,10 @@ export default function UploadPage() {
         {
           file_key: mainFileKey,
           metadata: payloadMetadata,
+          data_dictionary_key: ddKey || undefined,
+          pipeline_script_key: provKey || undefined,
+          sop_key: sopKey || undefined,
+          consent_doc_key: consentKey || undefined,
         }
       );
 

@@ -40,7 +40,7 @@ export default function RegisterPage() {
       onSuccess: () => {
         setSuccess(true);
         setTimeout(() => {
-          router.push("/login");
+          router.push("/upload");
         }, 1500);
       },
     });
