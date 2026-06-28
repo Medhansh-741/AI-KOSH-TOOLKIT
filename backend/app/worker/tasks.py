@@ -100,6 +100,8 @@ def run_assessment(self, assessment_id: str, file_key: str, metadata: Dict[str, 
             if not metadata_rec:
                 raise ValueError(f"Metadata for assessment {assessment_id} not found.")
             metadata_dict = {k: v for k, v in metadata_rec.__dict__.items() if not k.startswith('_')}
+            if metadata_rec.raw_form_json and isinstance(metadata_rec.raw_form_json, dict):
+                metadata_dict.update({k: v for k, v in metadata_rec.raw_form_json.items() if k not in metadata_dict or metadata_dict[k] is None})
 
             # Step 4: Download dataset file from S3 using file_key
             logger.info(f"Downloading file {file_key} from S3...")
@@ -182,8 +184,8 @@ def run_assessment(self, assessment_id: str, file_key: str, metadata: Dict[str, 
                     gaps_val = []
                     confidence_val = "Low"
                 else:
-                    domain_key = domains_mapping[domain_number][0]
-                    domain_criteria = criteria.get(domain_key, {})
+                    domains_dict = criteria.get("domains", {}) if isinstance(criteria, dict) else {}
+                    domain_criteria = domains_dict.get(domain_number, {}) or domains_dict.get(str(domain_number), {})
                     
                     try:
                         scorer_inst = ScorerClass(profile_json, metadata_dict, domain_criteria)

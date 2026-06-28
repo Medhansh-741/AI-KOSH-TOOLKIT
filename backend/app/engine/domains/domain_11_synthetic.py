@@ -12,10 +12,11 @@ class SyntheticDataScorer(BaseDomainScorer):
                 domain_number=self.DOMAIN_NUMBER,
                 domain_name=self.DOMAIN_NAME,
                 score=None,
+                max_score=None,
                 rationale="Dataset contains no synthetic or simulated data. Domain excluded from CQI calculation.",
                 evidence_items=[],
                 gaps=[],
-                confidence="Low",
+                confidence=None,
                 not_applicable=True
             )
             

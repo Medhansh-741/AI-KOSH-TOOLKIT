@@ -37,9 +37,12 @@ class RepresentativenessScorer(BaseDomainScorer):
         else:
             gaps.append("Sex distribution not reported.")
             
-        if geo == "national" and sites_val >= 5 and sex:
+        thresholds = self.criteria.get("thresholds", {}) if isinstance(self.criteria, dict) else {}
+        multi_site_min = thresholds.get("multi_site_min", 2)
+        
+        if geo == "national" and sites_val >= multi_site_min and sex:
             score = 4
-        elif geo in ["state", "region"] and sites_val >= 3:
+        elif geo in ["state", "region"] and sites_val >= multi_site_min:
             score = 3
         elif geo in ["district", "taluk", "village"] or sites_val > 1:
             score = 2

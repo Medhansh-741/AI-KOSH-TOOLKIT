@@ -14,6 +14,10 @@ class AIReadinessScorer(BaseDomainScorer):
         
         evidence.append(f"File format is {fmt}.")
         
+        thresholds = self.criteria.get("thresholds", {}) if isinstance(self.criteria, dict) else {}
+        imbalance_ok = float(thresholds.get("imbalance_ratio_ok", 3.0))
+        class_imbalance_ratio = self.profile.get("statistical_summary", {}).get("max_class_imbalance_ratio")
+        
         if fmt not in ["csv", "parquet", "json", "xlsx"]:
             gaps.append("Proprietary or unoptimized file format.")
             score = 1
@@ -24,8 +28,12 @@ class AIReadinessScorer(BaseDomainScorer):
             gaps.append("Data preprocessing pipeline script not linked.")
             score = 3
         else:
-            evidence.append("Data dictionary and pipeline script present.")
-            score = 4
+            if class_imbalance_ratio and class_imbalance_ratio > imbalance_ok:
+                gaps.append(f"Severe class imbalance detected ({class_imbalance_ratio} > {imbalance_ok}).")
+                score = 3
+            else:
+                evidence.append(f"Data dictionary and pipeline script present. Class balance within target ({imbalance_ok}).")
+                score = 4
             
         rationale = f"Score {score}: Format is {fmt} with dictionary={has_dict}."
         

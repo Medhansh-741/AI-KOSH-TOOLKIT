@@ -31,17 +31,20 @@ class PrivacyScorer(BaseDomainScorer):
         dp_applied = self.metadata.get("differential_privacy_applied", False)
         k_val = self.metadata.get("k_anonymity_value")
         
+        thresholds = self.criteria.get("thresholds", {}) if isinstance(self.criteria, dict) else {}
+        k_min = int(thresholds.get("k_anonymity_min", 5))
+        
         if not deident:
             gaps.append("No de-identification method declared.")
             score = 1
         elif dp_applied:
             evidence.append("Differential Privacy applied.")
             score = 4
-        elif k_val and int(k_val) >= 10:
-            evidence.append(f"k-anonymity verified with k={k_val}.")
+        elif k_val and int(k_val) >= (k_min * 2):
+            evidence.append(f"k-anonymity verified with k={k_val} (>= {k_min * 2}).")
             score = 4
-        elif k_val and int(k_val) >= 5:
-            evidence.append(f"k-anonymity verified with k={k_val}.")
+        elif k_val and int(k_val) >= k_min:
+            evidence.append(f"k-anonymity verified with k={k_val} (>= {k_min}).")
             score = 3
         else:
             evidence.append(f"De-identification applied: {deident}")

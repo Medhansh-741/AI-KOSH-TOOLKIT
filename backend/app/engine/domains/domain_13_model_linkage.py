@@ -9,13 +9,11 @@ class ModelLinkageScorer(BaseDomainScorer):
         gaps = []
         
         models = self.metadata.get("linked_model_ids")
+        neutral_score = self.criteria.get("neutral_score_when_no_models", 3)
         
-        if models is None:
-            gaps.append("No model linkage IDs provided.")
-            score = 1
-        elif isinstance(models, list) and len(models) == 0:
-            gaps.append("Linked models list is empty.")
-            score = 2
+        if models is None or (isinstance(models, list) and len(models) == 0):
+            evidence.append("No models linked to this dataset (neutral rating applied).")
+            score = neutral_score
         else:
             evidence.append(f"Linked model IDs: {models}")
             score = 3

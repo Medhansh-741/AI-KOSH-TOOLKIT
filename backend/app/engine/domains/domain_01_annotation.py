@@ -38,14 +38,18 @@ class AnnotationReliabilityScorer(BaseDomainScorer):
             irr_val_float = float(irr_value)
             evidence.append(f"IRR value reported: {irr_val_float} using method {irr_method or 'unknown'}")
             
-            if irr_val_float < 0.6:
-                gaps.append("IRR value below acceptable threshold (<0.6).")
+            thresholds = self.criteria.get("thresholds", {}) if isinstance(self.criteria, dict) else {}
+            irr_adequate = float(thresholds.get("irr_adequate", 0.6))
+            irr_exemplary = float(thresholds.get("irr_exemplary", 0.8))
+            
+            if irr_val_float < irr_adequate:
+                gaps.append(f"IRR value below acceptable threshold (<{irr_adequate}).")
                 score = 2
-            elif irr_val_float >= 0.6 and irr_val_float < 0.8:
-                evidence.append("IRR value is adequate (>=0.6).")
+            elif irr_val_float >= irr_adequate and irr_val_float < irr_exemplary:
+                evidence.append(f"IRR value is adequate (>={irr_adequate}).")
                 score = 3
             else:
-                evidence.append("IRR value is exemplary (>=0.8).")
+                evidence.append(f"IRR value is exemplary (>={irr_exemplary}).")
                 score = 4
 
         if num_annotators and int(num_annotators) >= 2:

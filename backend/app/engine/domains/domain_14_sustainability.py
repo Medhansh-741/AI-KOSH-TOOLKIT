@@ -10,8 +10,12 @@ class SustainabilityScorer(BaseDomainScorer):
         
         fmt = self.profile.get("file", {}).get("format", "csv").lower()
         size = self.profile.get("file", {}).get("size_bytes", 0)
+        sust_info = self.metadata.get("sustainability_info_provided", False)
         
-        if fmt == "parquet":
+        if sust_info:
+            evidence.append("Environmental sustainability documentation or energy usage information provided.")
+            score = 4
+        elif fmt == "parquet":
             evidence.append("Optimized binary column format (Parquet) reduces CPU cycles and storage size.")
             score = 3
         elif size < 10000000: # < 10MB

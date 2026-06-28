@@ -16,11 +16,11 @@ class StewardshipScorer(BaseDomainScorer):
             score = 1
         else:
             evidence.append("Named data steward designated.")
-            if dpdp == "compliant":
-                evidence.append("DPDP compliant status verified.")
+            if dpdp == "fully_compliant":
+                evidence.append("DPDP compliant status verified (fully compliant).")
                 score = 4
-            elif dpdp == "under_review":
-                evidence.append("DPDP compliance under review.")
+            elif dpdp == "partially_compliant":
+                evidence.append("DPDP compliance in progress (partially compliant).")
                 score = 3
             else:
                 gaps.append("DPDP compliance status not verified or non-compliant.")

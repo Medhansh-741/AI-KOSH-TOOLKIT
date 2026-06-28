@@ -1,6 +1,6 @@
 "use client"
 
-import React, { use } from "react";
+import React from "react";
 import Link from "next/link";
 import { useAssessmentStatus } from "@/hooks/use-assessment";
 import CQIGauge from "@/components/cqi-gauge";
@@ -19,11 +19,11 @@ import {
 import { AssessmentResultResponse } from "@/lib/types";
 
 interface PageProps {
-  params: Promise<{ id: string }>;
+  params: { id: string };
 }
 
 export default function AssessmentDetailsPage({ params }: PageProps) {
-  const { id } = use(params);
+  const id = params.id;
   const { data, isLoading, error } = useAssessmentStatus(id);
 
   if (isLoading) {

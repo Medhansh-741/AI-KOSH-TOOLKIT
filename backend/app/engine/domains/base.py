@@ -5,11 +5,12 @@ from pydantic import BaseModel
 class DomainScoreResult(BaseModel):
     domain_number: int
     domain_name: str
-    score: Optional[int]
+    score: Optional[int] = None
+    max_score: Optional[int] = 4
     rationale: str
     evidence_items: List[str]
     gaps: List[str]
-    confidence: str
+    confidence: Optional[str] = "Low"
     not_applicable: bool = False
 
 class BaseDomainScorer(ABC):
