@@ -35,7 +35,7 @@ class PRSResult:
     differential_privacy_applied: bool
     epsilon: Optional[float]
 
-def compute_prs(profile: Dict[str, Any], metadata: Dict[str, Any]) -> PRSResult:
+def compute_prs(profile: Dict[str, Any], metadata: Dict[str, Any], criteria: Optional[Dict[str, Any]] = None) -> PRSResult:
     # Step 1: Identification risk
     pii_scan = profile.get("pii_scan", {})
     if pii_scan.get("direct_identifiers_detected", False):
@@ -64,10 +64,28 @@ def compute_prs(profile: Dict[str, Any], metadata: Dict[str, Any]) -> PRSResult:
 
     # Step 2: Sensitivity multiplier
     sensitivity = metadata.get("sensitivity_class", "standard")
-    multiplier = SENSITIVITY_MULTIPLIERS.get(sensitivity, 1.0)
+    prs_config = criteria.get("prs", {}) if isinstance(criteria, dict) else {}
+    sens_mult = prs_config.get("sensitivity_multipliers", SENSITIVITY_MULTIPLIERS)
+    multiplier = float(sens_mult.get(sensitivity, SENSITIVITY_MULTIPLIERS.get(sensitivity, 1.0)))
     adjusted = baseline * multiplier
     prs = min(100, int(adjusted + 0.5))
-    band = next(label for threshold, label in PRS_BANDS if prs >= threshold)
+
+    prs_bands_cfg = prs_config.get("bands", {})
+    if prs_bands_cfg:
+        high_max = int(prs_bands_cfg.get("high_max", 70))
+        mod_max = int(prs_bands_cfg.get("moderate_max", 40))
+        low_max = int(prs_bands_cfg.get("low_max", 15))
+        if prs > high_max:
+            band = "Very High"
+        elif prs > mod_max:
+            band = "High"
+        elif prs > low_max:
+            band = "Moderate"
+        else:
+            band = "Low"
+    else:
+        band = next(label for threshold, label in PRS_BANDS if prs >= threshold)
+
     trace = f"baseline={baseline} ({basis}) × multiplier={multiplier} ({sensitivity}) = {adjusted} → PRS={prs}"
 
 

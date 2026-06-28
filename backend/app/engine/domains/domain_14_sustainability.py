@@ -18,12 +18,15 @@ class SustainabilityScorer(BaseDomainScorer):
         elif fmt == "parquet":
             evidence.append("Optimized binary column format (Parquet) reduces CPU cycles and storage size.")
             score = 3
-        elif size < 10000000: # < 10MB
-            evidence.append("Small file footprint reduces transmission and analysis carbon costs.")
-            score = 3
         else:
-            gaps.append("Large raw text file (CSV/XLSX) increases storage and compute footprint.")
-            score = 2
+            thresholds = self.criteria.get("thresholds", {}) if isinstance(self.criteria, dict) else {}
+            max_bytes = int(thresholds.get("max_file_size_bytes", 10000000))
+            if size < max_bytes:
+                evidence.append(f"Small file footprint (<{max_bytes} bytes) reduces transmission and analysis carbon costs.")
+                score = 3
+            else:
+                gaps.append("Large raw text file (CSV/XLSX) increases storage and compute footprint.")
+                score = 2
             
         rationale = f"Score {score}: Sustainability assessed on size and file format."
         

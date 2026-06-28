@@ -52,7 +52,9 @@ class AnnotationReliabilityScorer(BaseDomainScorer):
                 evidence.append(f"IRR value is exemplary (>={irr_exemplary}).")
                 score = 4
 
-        if num_annotators and int(num_annotators) >= 2:
+        thresholds = self.criteria.get("thresholds", {}) if isinstance(self.criteria, dict) else {}
+        min_ann = int(thresholds.get("min_annotators", 2))
+        if num_annotators and int(num_annotators) >= min_ann:
             evidence.append(f"Multi-annotator team: {num_annotators} annotators.")
         else:
             gaps.append("Dataset was annotated by a single or unknown number of annotators.")

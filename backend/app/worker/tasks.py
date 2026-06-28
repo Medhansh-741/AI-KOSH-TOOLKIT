@@ -233,10 +233,10 @@ def run_assessment(self, assessment_id: str, file_key: str, metadata: Dict[str, 
             db.commit()
             
             # Step 7: Compute CQI
-            cqi_res = compute_cqi(domain_scores_dict, assessment.domain_11_applicable)
+            cqi_res = compute_cqi(domain_scores_dict, assessment.domain_11_applicable, criteria)
 
             # Step 8: Compute PRS
-            prs_res = compute_prs(profile_json, metadata_dict)
+            prs_res = compute_prs(profile_json, metadata_dict, criteria)
 
             # Step 9: Run release classification
             domain_7_score_obj = next((ds for ds in domain_scores_list if ds.domain_number == 7), None)
@@ -250,7 +250,8 @@ def run_assessment(self, assessment_id: str, file_key: str, metadata: Dict[str, 
                 prs=prs_res.prs,
                 prs_band=prs_res.band,
                 sensitivity_class=metadata_dict.get("sensitivity_class", "standard"),
-                differential_privacy_verified=dp_verified
+                differential_privacy_verified=dp_verified,
+                criteria=criteria
             )
 
             # Step 10: Generate reports (JSON + HTML + PDF) -> upload to S3

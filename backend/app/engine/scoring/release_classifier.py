@@ -1,4 +1,4 @@
-from typing import Dict, Any, Literal
+from typing import Dict, Any, Literal, Optional
 from pydantic import BaseModel
 
 class ReleaseClassificationResult(BaseModel):
@@ -13,7 +13,8 @@ class ReleaseClassificationEngine:
         prs: int,
         prs_band: str,
         sensitivity_class: str,
-        differential_privacy_verified: bool = False
+        differential_privacy_verified: bool = False,
+        criteria: Optional[Dict[str, Any]] = None
     ) -> ReleaseClassificationResult:
         """Applies the CQI x PRS matrix to classify the dataset release."""
         # Policy override: high-stigma / critical data
@@ -32,10 +33,14 @@ class ReleaseClassificationEngine:
                 )
 
         # Standard CQI × PRS matrix
-        if cqi >= 70.0 and prs_band == "Low":
+        rel_cfg = criteria.get("release", {}) if isinstance(criteria, dict) else {}
+        open_cqi_min = float(rel_cfg.get("open_cqi_min", 70.0))
+        open_prs_band = str(rel_cfg.get("open_prs_band", "Low"))
+
+        if cqi >= open_cqi_min and prs_band == open_prs_band:
             return ReleaseClassificationResult(
                 classification="Open",
-                justification=f"CQI={cqi} (>=70) and PRS={prs} (Low). Open access permitted.",
+                justification=f"CQI={cqi} (>={open_cqi_min}) and PRS={prs} ({open_prs_band}). Open access permitted.",
                 policy_override_applied=False
             )
         if cqi >= 70.0 and prs_band == "Moderate":

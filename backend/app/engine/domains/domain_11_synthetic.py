@@ -36,8 +36,10 @@ class SyntheticDataScorer(BaseDomainScorer):
         elif utility and privacy:
             evidence.append("Synthetic utility and privacy tested.")
             score = 3
-            if float(pct) >= 50.0:
-                evidence.append("Majority synthetic dataset (>50%).")
+            thresholds = self.criteria.get("thresholds", {}) if isinstance(self.criteria, dict) else {}
+            maj_pct = float(thresholds.get("majority_synthetic_pct", 50.0))
+            if float(pct) >= maj_pct:
+                evidence.append(f"Majority synthetic dataset (>={maj_pct}%).")
                 score = 4
         else:
             score = 1

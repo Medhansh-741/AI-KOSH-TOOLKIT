@@ -24,11 +24,15 @@ class MetadataCompletenessScorer(BaseDomainScorer):
                 gaps.append(f"Metadata field '{f}' is missing.")
                 
         pct = (filled / len(key_fields)) * 100
-        if pct < 30:
+        thresholds = self.criteria.get("thresholds", {}) if isinstance(self.criteria, dict) else {}
+        t1 = float(thresholds.get("tier1", 30.0))
+        t2 = float(thresholds.get("tier2", 60.0))
+        t3 = float(thresholds.get("tier3", 85.0))
+        if pct < t1:
             score = 1
-        elif pct < 60:
+        elif pct < t2:
             score = 2
-        elif pct < 85:
+        elif pct < t3:
             score = 3
         else:
             score = 4

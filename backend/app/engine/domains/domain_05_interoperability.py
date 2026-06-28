@@ -22,9 +22,10 @@ class InteroperabilityScorer(BaseDomainScorer):
         
         thresholds = self.criteria.get("thresholds", {}) if isinstance(self.criteria, dict) else {}
         target_pct = float(thresholds.get("completeness_pct", 90.0))
+        comp_floor = float(thresholds.get("completeness_floor", 50.0))
         
-        if overall_pct < 50.0:
-            gaps.append("Extremely low data completeness (<50%).")
+        if overall_pct < comp_floor:
+            gaps.append(f"Extremely low data completeness (<{comp_floor}%).")
             score = 1
         elif overall_pct < (target_pct - 15.0):
             gaps.append(f"Low data completeness (<{target_pct - 15.0}%).")

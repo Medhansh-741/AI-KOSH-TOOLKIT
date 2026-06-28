@@ -28,6 +28,10 @@ domains:
   2:
     name: "Metadata Completeness"
     weight: 1.0
+    thresholds:
+      tier1: 30.0
+      tier2: 60.0
+      tier3: 85.0
     inferred: false
 
   # ---------------------------------------------------------------------------
@@ -59,6 +63,7 @@ domains:
     weight: 1.0
     thresholds:
       completeness_pct: 90.0      # Column completeness % required for a good score
+      completeness_floor: 50.0    # Column completeness % floor for score calculation
     inferred: false
 
   # ---------------------------------------------------------------------------
@@ -117,6 +122,8 @@ domains:
   11:
     name: "Synthetic / Simulated Data"
     weight: 1.0
+    thresholds:
+      majority_synthetic_pct: 50.0
     inferred: false
 
   # ---------------------------------------------------------------------------
@@ -146,6 +153,8 @@ domains:
   14:
     name: "Environmental Sustainability"
     weight: 1.0
+    thresholds:
+      max_file_size_bytes: 10000000
     inferred: true
     inferred_note: "Compression ratio used as sustainability proxy from storage efficiency literature"
 

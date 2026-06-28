@@ -16,7 +16,7 @@ class AIReadinessScorer(BaseDomainScorer):
         
         thresholds = self.criteria.get("thresholds", {}) if isinstance(self.criteria, dict) else {}
         imbalance_ok = float(thresholds.get("imbalance_ratio_ok", 3.0))
-        class_imbalance_ratio = self.profile.get("statistical_summary", {}).get("max_class_imbalance_ratio")
+        class_imbalance_ratio = self.profile.get("label_columns", {}).get("imbalance_ratio") if isinstance(self.profile.get("label_columns"), dict) else None
         
         if fmt not in ["csv", "parquet", "json", "xlsx"]:
             gaps.append("Proprietary or unoptimized file format.")
