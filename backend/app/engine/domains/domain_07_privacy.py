@@ -27,9 +27,12 @@ class PrivacyScorer(BaseDomainScorer):
             
         evidence.append("No direct identifiers found in dataset.")
         
-        deident = self.metadata.get("deidentification_method")
+        deident = self._get_clean_str("deidentification_method") or self.metadata.get("deidentification_method")
         dp_applied = self.metadata.get("differential_privacy_applied", False)
         k_val = self.metadata.get("k_anonymity_value")
+        declared_direct_ids = self.metadata.get("direct_identifiers_present")
+        if declared_direct_ids and isinstance(declared_direct_ids, list):
+            evidence.append(f"Declared direct identifiers in metadata: {', '.join(declared_direct_ids)}.")
         
         thresholds = self.criteria.get("thresholds", {}) if isinstance(self.criteria, dict) else {}
         k_min = int(thresholds.get("k_anonymity_min", 5))

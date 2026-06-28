@@ -36,6 +36,11 @@ class RepresentativenessScorer(BaseDomainScorer):
             evidence.append(f"Sex distribution reported: {sex}")
         else:
             gaps.append("Sex distribution not reported.")
+
+        age_min = self.metadata.get("age_range_min")
+        age_max = self.metadata.get("age_range_max")
+        if age_min is not None or age_max is not None:
+            evidence.append(f"Age demographic boundaries documented: {age_min if age_min is not None else 0} - {age_max if age_max is not None else 'N/A'} years.")
             
         thresholds = self.criteria.get("thresholds", {}) if isinstance(self.criteria, dict) else {}
         multi_site_min = thresholds.get("multi_site_min", 2)

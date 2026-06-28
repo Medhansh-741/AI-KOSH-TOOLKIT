@@ -67,6 +67,8 @@ class DatasetMetadata(Base):
     github_repo_url = Column(String(500), nullable=True)
     changelog_provided = Column(Boolean, default=False, server_default=text("false"), nullable=True)
     version_format = Column(String(50), nullable=True)
+    sustainability_info_provided = Column(Boolean, default=False, server_default=text("false"), nullable=False)
+    feedback_mechanism_exists = Column(Boolean, default=False, server_default=text("false"), nullable=False)
     
     raw_form_json = Column(JSONB, nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())

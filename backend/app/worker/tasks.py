@@ -66,7 +66,7 @@ def run_assessment(self, assessment_id: str, file_key: str, metadata: Dict[str, 
     """Celery task running Ingestion -> Profiling -> Scoring -> Classification in background."""
     logger.info(f"Starting background assessment task {assessment_id} for file {file_key}")
     
-    workspace_dir = "C:\\Users\\medha\\OneDrive\\Desktop\\AI-KOSH-TOOLKIT"
+    workspace_dir = os.getenv("WORKSPACE_DIR", os.getcwd())
     if not os.path.exists(workspace_dir):
         workspace_dir = "/app"
         
@@ -404,8 +404,8 @@ def run_assessment(self, assessment_id: str, file_key: str, metadata: Dict[str, 
                 "prs_band": prs_res.band,
                 "release_classification": release_res.classification,
                 "domain_scores": formatted_domain_scores,
-                "domain_11_applicable": assessment.domain_11_applicable,
-                "report_url": f"http://localhost:8000/api/v1/assess/{assessment_id}/report?format=html",
+                "api_base_url": os.getenv("API_BASE_URL", "http://localhost:8000"),
+                "report_url": f"{os.getenv('API_BASE_URL', 'http://localhost:8000')}/api/v1/assess/{assessment_id}/report?format=html",
                 "audit_log_id": str(complete_audit.log_id)
             }
 

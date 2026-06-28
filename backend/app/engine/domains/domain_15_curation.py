@@ -10,6 +10,9 @@ class CurationScorer(BaseDomainScorer):
         
         repo = self._get_clean_str("github_repo_url")
         changelog = self.metadata.get("changelog_provided", False)
+        feedback_exists = self.metadata.get("feedback_mechanism_exists", False)
+        if feedback_exists:
+            evidence.append("User feedback collection & continuous curation mechanism active.")
         
         if not repo and not changelog:
             gaps.append("No active repository or version changelog provided.")

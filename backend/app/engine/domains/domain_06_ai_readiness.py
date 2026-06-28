@@ -18,6 +18,14 @@ class AIReadinessScorer(BaseDomainScorer):
         imbalance_ok = float(thresholds.get("imbalance_ratio_ok", 3.0))
         class_imbalance_ratio = self.profile.get("label_columns", {}).get("imbalance_ratio") if isinstance(self.profile.get("label_columns"), dict) else None
         
+        dq_checks = self.metadata.get("dq_checks_applied")
+        if dq_checks and isinstance(dq_checks, list):
+            evidence.append(f"Automated data quality checks documented: {', '.join(dq_checks)}.")
+
+        shape_info = self.profile.get("shape", {})
+        if shape_info:
+            evidence.append(f"Dataset profile dimensions verified ({shape_info.get('rows', 0)} rows, {shape_info.get('columns', 0)} cols).")
+
         if fmt not in ["csv", "parquet", "json", "xlsx"]:
             gaps.append("Proprietary or unoptimized file format.")
             score = 1
