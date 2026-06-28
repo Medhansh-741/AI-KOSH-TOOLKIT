@@ -9,9 +9,9 @@ class DocumentationScorer(BaseDomainScorer):
         gaps = []
         
         has_dict = self.metadata.get("data_dictionary_uploaded", False)
-        has_ethics = bool(self.metadata.get("ethics_approval_ref"))
-        has_consent = bool(self.metadata.get("consent_type"))
-        has_repo = bool(self.metadata.get("github_repo_url"))
+        has_ethics = bool(self._get_clean_str("ethics_approval_ref"))
+        has_consent = bool(self._get_clean_str("consent_type"))
+        has_repo = bool(self._get_clean_str("github_repo_url"))
         
         items = 0
         if has_dict:

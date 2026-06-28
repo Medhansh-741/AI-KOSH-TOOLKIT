@@ -8,8 +8,8 @@ class EthicsScorer(BaseDomainScorer):
         evidence = []
         gaps = []
         
-        ethics = self.metadata.get("ethics_approval_ref")
-        consent = self.metadata.get("consent_type")
+        ethics = self._get_clean_str("ethics_approval_ref")
+        consent = self._get_clean_str("consent_type")
         equity = self.metadata.get("equity_analysis_performed", False)
         community = self.metadata.get("community_engagement", False)
         redress = self.metadata.get("redressal_mechanism_exists", False)

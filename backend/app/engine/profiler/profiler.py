@@ -150,7 +150,8 @@ class DatasetProfiler:
                     col_profile["max"]    = float(non_null.max())
                     col_profile["mean"]   = round(float(non_null.mean()), 4)
                     col_profile["median"] = round(float(non_null.median()), 4)
-                    col_profile["std"]    = round(float(non_null.std()), 4)
+                    std_val = non_null.std()
+                    col_profile["std"]    = round(float(std_val), 4) if pd.notna(std_val) else 0.0
 
                     q1  = non_null.quantile(0.25)
                     q3  = non_null.quantile(0.75)

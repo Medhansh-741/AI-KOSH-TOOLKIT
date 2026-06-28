@@ -19,6 +19,13 @@ class BaseDomainScorer(ABC):
         self.metadata = metadata
         self.criteria = criteria
 
+    def _get_clean_str(self, key: str) -> Optional[str]:
+        val = self.metadata.get(key)
+        if isinstance(val, str):
+            cleaned = val.strip()
+            return cleaned if cleaned else None
+        return val if val is not None else None
+
     @abstractmethod
     def score(self) -> DomainScoreResult:
         """Computes the 0-4 score. Must be overridden by subclasses."""

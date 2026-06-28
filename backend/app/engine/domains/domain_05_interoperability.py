@@ -35,7 +35,7 @@ class InteroperabilityScorer(BaseDomainScorer):
             score = 2
         else:
             score = 3
-            declared_standards = self.metadata.get("standards_used")
+            declared_standards = self._get_clean_str("standards_used")
             has_declared_std = bool(declared_standards) and str(declared_standards).lower() not in ["none", "no standard applied", "custom / internal coding system"]
             
             if icd_present or fhir_present or snomed_present or loinc_present or has_declared_std:

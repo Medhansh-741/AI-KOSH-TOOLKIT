@@ -10,7 +10,7 @@ class ProvenanceScorer(BaseDomainScorer):
         
         pipeline = self.metadata.get("provenance_pipeline_available", False)
         changelog = self.metadata.get("changelog_provided", False)
-        ver = self.metadata.get("version_format")
+        ver = self._get_clean_str("version_format")
         
         if not pipeline and not changelog and not ver:
             gaps.append("No provenance metadata provided.")

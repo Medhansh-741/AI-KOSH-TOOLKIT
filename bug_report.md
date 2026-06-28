@@ -27,10 +27,77 @@ To guarantee tests are never loosened to hide codebase bugs, every test assertio
 ### Remediation Batch Grouping Strategy
 Bugs are executed in 5 sequential, layer-based batches following data dependency order:
 1. **Batch 1 (Score Range & Scaling Integrity — COMPLETED):** Resolved 8 bugs eliminating `score=0` across D01, D03, D05, D07, D10, worker fallback, DB check constraints, and dynamic CQI max calculation.
-2. **Batch 2 (Core Scorer & YAML Wiring):** Fix D06 phantom profiler key and bind PRS, CQI, and Release Classifier directly to `domain_criteria.yaml` so scoring logic is fully dynamic.
-3. **Batch 3 (Input Hygiene & Sanitation):** Add `.strip()` checks across all 8 string-parsing scorers and fix profiler edge cases (empty dataframes, single-row `NaN` standard deviations).
-4. **Batch 4 (DB Models & Schema Alignment):** Add missing database columns (`sustainability_info_provided`, `feedback_mechanism_exists`), align ORM nullability with Pydantic, and replace hardcoded workspace paths.
+2. **Batch 2 (Core Scorer & YAML Wiring — COMPLETED):** Fix D06 phantom profiler key and bind PRS, CQI, and Release Classifier directly to `domain_criteria.yaml` so scoring logic is fully dynamic.
+3. **Batch 3 (Input Hygiene & Sanitation — COMPLETED):** Add `.strip()` checks across all 8 string-parsing scorers and fix profiler edge cases (empty dataframes, single-row `NaN` standard deviations).
+4. **Batch 4 (DB Models & Schema Alignment — NEXT):** Add missing database columns (`sustainability_info_provided`, `feedback_mechanism_exists`), align ORM nullability with Pydantic, and replace hardcoded workspace paths.
 5. **Batch 5 (Frontend Types & Client Alignment):** Align TypeScript interfaces in `index.ts` with backend Pydantic models and add missing HTTP methods (`PUT`) and error handlers in `client.ts`.
+
+#### Complete Batch Traceability Matrix (45 / 45 Bugs)
+
+##### Batch 1: Score Range & Scaling Integrity (COMPLETED) — 8 Bugs
+| # | Bug ID | File & Line | Description | Status |
+|---|--------|-------------|-------------|--------|
+| 1 | I1-01 | [domain_01_annotation.py](backend/app/engine/domains/domain_01_annotation.py#L24) | `score=0` when annotation_methodology missing | FIXED |
+| 2 | I1-02 | [domain_03_documentation.py](backend/app/engine/domains/domain_03_documentation.py#L41) | `score = items` returned 0 when docs missing | FIXED |
+| 3 | I1-03 | [domain_05_interoperability.py](backend/app/engine/domains/domain_05_interoperability.py#L28) | `score=0` when completeness < 50% | FIXED |
+| 4 | I1-04 | [domain_07_privacy.py](backend/app/engine/domains/domain_07_privacy.py#L21) | `score=0` when direct PII detected | FIXED |
+| 5 | I1-05 | [domain_10_ethics.py](backend/app/engine/domains/domain_10_ethics.py#L19) | `score=0` when ethics+consent missing | FIXED |
+| 6 | I1-06 | [tasks.py](backend/app/worker/tasks.py#L211) | Worker error fallback assigned `score_val=0` | FIXED |
+| 7 | I1-08 | [cqi.py](backend/app/engine/scoring/cqi.py#L25) | Hardcoded static max_possible denominator (60/56) | FIXED |
+| 9 | I1-07 | [domain_score.py](backend/app/models/domain_score.py#L13) | DB CHECK constraint permitted `score >= 0` | FIXED |
+
+##### Batch 2: Core Scorer & YAML Wiring (COMPLETED) — 9 Bugs
+| # | Bug ID | File & Line | Description | Status |
+|---|--------|-------------|-------------|--------|
+| 8 | I7-08 | [domain_06_ai_readiness.py](backend/app/engine/domains/domain_06_ai_readiness.py#L19) | Phantom `statistical_summary` key prevented D06 imbalance evaluation | FIXED |
+| 10 | I2-01 | [domain_02_metadata.py](backend/app/engine/domains/domain_02_metadata.py#L27) | Hardcoded percentage tiers (30/60/85) | FIXED |
+| 11 | I2-02 | [domain_05_interoperability.py](backend/app/engine/domains/domain_05_interoperability.py#L26) | Hardcoded completeness floor (50.0) | FIXED |
+| 12 | I2-03 | [domain_14_sustainability.py](backend/app/engine/domains/domain_14_sustainability.py#L21) | Hardcoded file size limit (10MB) | FIXED |
+| 13 | I2-04 | [domain_11_synthetic.py](backend/app/engine/domains/domain_11_synthetic.py#L39) | Hardcoded synthetic majority threshold (50%) | FIXED |
+| 14 | I2-05 | [prs.py](backend/app/engine/scoring/prs.py#L4) | Entire PRS engine ignored YAML criteria configuration | FIXED |
+| 15 | I2-06 | [cqi.py](backend/app/engine/scoring/cqi.py#L4) | CQI quality bands ignored YAML criteria configuration | FIXED |
+| 16 | I2-07 | [release_classifier.py](backend/app/engine/scoring/release_classifier.py#L35) | Release matrix thresholds ignored YAML criteria configuration | FIXED |
+| 20 | I2-08 | [domain_01_annotation.py](backend/app/engine/domains/domain_01_annotation.py#L55) | Hardcoded `>= 2` annotators instead of reading YAML | FIXED |
+
+##### Batch 3: Input Hygiene & Sanitation (COMPLETED) — 2 Bugs
+| # | Bug ID | File & Line | Description | Status |
+|---|--------|-------------|-------------|--------|
+| 21 | I4-01 | (8 domain scorers) | No `.strip()` on string evaluations (handled via `BaseDomainScorer._get_clean_str()`) | FIXED |
+| 35 | L4-01 | [profiler.py](backend/app/engine/profiler/profiler.py#L153) | Single-row CSVs produced non-standard JSON `NaN` standard deviations | FIXED |
+
+##### Batch 4: DB Models, Schema Alignment & Worker Hygiene (NEXT) — 19 Bugs
+| # | Bug ID | File & Line | Description | Planned Action |
+|---|--------|-------------|-------------|----------------|
+| 17 | Q5-01 | [metadata_form.py](backend/app/schemas/metadata_form.py#L67) / [dataset_metadata.py](backend/app/models/dataset_metadata.py#L67) | `sustainability_info_provided` (Q47) & `feedback_mechanism_exists` (Q48) have no ORM columns | Add missing DB columns to `dataset_metadata.py` & migration |
+| 18 | 3A-01 | [tasks.py](backend/app/worker/tasks.py#L69) | Hardcoded dev machine path (`C:\Users\medha\...`) | Replace with dynamic environment path resolution |
+| 19 | Q5-02 | [metadata_form.py](backend/app/schemas/metadata_form.py#L32) / [dataset_metadata.py](backend/app/models/dataset_metadata.py#L32) | 4 required Pydantic fields (`standards_used`, `deidentification_method`, `access_control_method`, `license_type`) map to nullable DB columns | Update ORM column definitions to `nullable=False` |
+| 22 | I5-01 | [metadata_form.py](backend/app/schemas/metadata_form.py#L16) | `age_range_min` (Q5) collected from users but never consumed | Wire into D04 representativeness evaluation |
+| 23 | I5-02 | [metadata_form.py](backend/app/schemas/metadata_form.py#L17) | `age_range_max` (Q6) collected from users but never consumed | Wire into D04 representativeness evaluation |
+| 24 | I5-03 | [metadata_form.py](backend/app/schemas/metadata_form.py#L21) | `collection_start_date` (Q10) collected but unconsumed | Wire into D09 provenance temporal lineage |
+| 25 | I5-04 | [metadata_form.py](backend/app/schemas/metadata_form.py#L22) | `collection_end_date` (Q11) collected but unconsumed | Wire into D09 provenance temporal lineage |
+| 26 | I5-05 | [metadata_form.py](backend/app/schemas/metadata_form.py#L37) | `direct_identifiers_present` (Q27) collected but unused | Wire into D07 privacy metadata verification |
+| 27 | I5-06 | [metadata_form.py](backend/app/schemas/metadata_form.py#L40) | `temporal_granularity` (Q30) collected but unused | Wire into D09 provenance temporal granularity |
+| 28 | I5-07 | [metadata_form.py](backend/app/schemas/metadata_form.py#L30) | `dq_checks_applied` (Q20) collected but unused | Wire into D06 AI readiness checks |
+| 29 | I5-08 | [metadata_form.py](backend/app/schemas/metadata_form.py#L68) | `feedback_mechanism_exists` (Q48) collected but unused | Wire into D15 curation evaluation |
+| 30 | 3A-02 | [tasks.py](backend/app/worker/tasks.py#L407) | Hardcoded `localhost:8000` in webhook payload | Read host dynamically from environment configuration |
+| 36 | I7-01 | [profiler.py](backend/app/engine/profiler/profiler.py#L89) | `shape` profiler output key unconsumed | Clean up / consume profiler payload |
+| 37 | I7-02 | [profiler.py](backend/app/engine/profiler/profiler.py#L90) | `columns` profiler output key unconsumed | Clean up / consume profiler payload |
+| 38 | I7-03 | [profiler.py](backend/app/engine/profiler/profiler.py#L93) | `duplicates` profiler output key unconsumed | Clean up / consume profiler payload |
+| 39 | I7-04 | [profiler.py](backend/app/engine/profiler/profiler.py#L95) | `split_columns` profiler output key unconsumed | Clean up / consume profiler payload |
+| 40 | I7-05 | [profiler.py](backend/app/engine/profiler/profiler.py#L96) | `label_columns` profiler output key unconsumed | Clean up / consume profiler payload |
+| 41 | I7-06 | [profiler.py](backend/app/engine/profiler/profiler.py#L97) | `age_distribution` profiler output key unconsumed | Clean up / consume profiler payload |
+| 42 | I7-07 | [profiler.py](backend/app/engine/profiler/profiler.py#L98) | `schema_consistency` profiler output key unconsumed | Clean up / consume profiler payload |
+
+##### Batch 5: Frontend Types & Client Alignment — 7 Bugs
+| # | Bug ID | File & Line | Description | Planned Action |
+|---|--------|-------------|-------------|----------------|
+| 31 | 3C-01 | [index.ts](frontend/lib/types/index.ts#L39) | `standards_used?: string` optional in TS but required in Pydantic | Align TS interface to required |
+| 32 | 3C-02 | [index.ts](frontend/lib/types/index.ts#L42) | `deidentification_method?: string` optional in TS but required in Pydantic | Align TS interface to required |
+| 33 | 3C-03 | [index.ts](frontend/lib/types/index.ts#L62) | `access_control_method?: string` optional in TS but required in Pydantic | Align TS interface to required |
+| 34 | 3C-04 | [index.ts](frontend/lib/types/index.ts#L26) | `geographic_coverage?: string` optional in TS but required in Pydantic | Align TS interface to required |
+| 43 | 3C-05 | [index.ts](frontend/lib/types/index.ts#L71) | Missing `inferred` field in TS `DomainScore` interface | Add `inferred: boolean` to TS type |
+| 44 | 3C-06 | [client.ts](frontend/lib/api/client.ts#L35) | No `put` method in API client (`client.ts`) | Implement `put()` wrapper in API client |
+| 45 | 3C-07 | [client.ts](frontend/lib/api/client.ts#L17) | Missing 401/429 HTTP error handling | Implement dedicated status handlers |
 
 ### Required Output Format per Bug Fix
 Every fixed bug in each batch must be reported using this strict format:

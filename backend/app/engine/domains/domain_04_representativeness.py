@@ -8,9 +8,9 @@ class RepresentativenessScorer(BaseDomainScorer):
         evidence = []
         gaps = []
         
-        geo = self.metadata.get("geographic_coverage")
+        geo = self._get_clean_str("geographic_coverage")
         sites = self.metadata.get("num_sites")
-        sex = self.metadata.get("sex_distribution")
+        sex = self._get_clean_str("sex_distribution")
         
         if not geo:
             gaps.append("Geographic coverage not declared.")

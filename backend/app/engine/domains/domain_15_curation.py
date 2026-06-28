@@ -8,7 +8,7 @@ class CurationScorer(BaseDomainScorer):
         evidence = []
         gaps = []
         
-        repo = self.metadata.get("github_repo_url")
+        repo = self._get_clean_str("github_repo_url")
         changelog = self.metadata.get("changelog_provided", False)
         
         if not repo and not changelog:

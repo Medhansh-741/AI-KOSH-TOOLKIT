@@ -17,7 +17,7 @@ class MetadataCompletenessScorer(BaseDomainScorer):
         
         filled = 0
         for f in key_fields:
-            if self.metadata.get(f):
+            if self._get_clean_str(f):
                 filled += 1
                 evidence.append(f"Metadata field '{f}' is populated.")
             else:

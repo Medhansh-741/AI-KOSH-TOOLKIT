@@ -8,7 +8,7 @@ class SecurityScorer(BaseDomainScorer):
         evidence = []
         gaps = []
         
-        control = self.metadata.get("access_control_method")
+        control = self._get_clean_str("access_control_method")
         dua = self.metadata.get("dua_required", False)
         
         control_str = (control or "").lower()
