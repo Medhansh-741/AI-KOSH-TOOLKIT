@@ -15,6 +15,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(url, options);
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error("Unauthorized: Authentication required.");
+    }
+    if (response.status === 429) {
+      throw new Error("Too Many Requests: Rate limit exceeded. Please try again later.");
+    }
     let errorMessage = `HTTP error! status: ${response.status}`;
     try {
       const errorData = await response.json();
@@ -41,6 +47,14 @@ export const api = {
     return request<T>(path, {
       ...options,
       method: "POST",
+      body: isFormData ? body : JSON.stringify(body),
+    });
+  },
+  put<T>(path: string, body?: any, options?: RequestInit) {
+    const isFormData = body instanceof FormData;
+    return request<T>(path, {
+      ...options,
+      method: "PUT",
       body: isFormData ? body : JSON.stringify(body),
     });
   },

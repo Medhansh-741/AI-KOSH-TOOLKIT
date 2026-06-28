@@ -23,7 +23,7 @@ export interface MetadataForm {
   dataset_type: string;
   study_type: string;
   target_population: string;
-  geographic_coverage?: string;
+  geographic_coverage: string;
   age_range_min?: number;
   age_range_max?: number;
   sex_distribution?: string;
@@ -36,10 +36,10 @@ export interface MetadataForm {
   irr_value?: number;
   annotator_qualifications?: string;
   dq_checks_applied?: string[];
-  standards_used?: string;
+  standards_used: string;
   ethics_approval_ref?: string;
   consent_type?: string;
-  deidentification_method?: string;
+  deidentification_method: string;
   direct_identifiers_present?: string[];
   k_anonymity_value?: number;
   location_granularity?: string;
@@ -59,13 +59,14 @@ export interface MetadataForm {
   dua_required?: boolean;
   named_steward_exists?: boolean;
   dpdp_compliance_status?: string;
-  access_control_method?: string;
+  access_control_method: string;
   linked_model_ids?: string[];
   data_dictionary_uploaded?: boolean;
   provenance_pipeline_available?: boolean;
   github_repo_url?: string;
-  changelog_provided?: boolean;
   version_format?: string;
+  sustainability_info_provided?: boolean;
+  feedback_mechanism_exists?: boolean;
 }
 
 export interface DomainScore {
@@ -74,6 +75,7 @@ export interface DomainScore {
   score: number | null;
   max_score: number | null;
   not_applicable: boolean;
+  inferred: boolean;
   confidence: "High" | "Medium" | "Low" | null;
   rationale: string;
   evidence_items: string[];
